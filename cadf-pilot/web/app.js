@@ -1195,7 +1195,7 @@ const AppController = (() => {
       const key=JSON.stringify({...data,read_at:undefined,orchestrator:{state:data.orchestrator.state,job_id:data.orchestrator.job_id,notice:data.orchestrator.notice,results:data.orchestrator.results}});
       if(key!==snapshotKey){Store.set(data);snapshotKey=key;}
       DOM.get('connection').className = '';
-      DOM.get('connection').textContent = 'File snapshot refreshed ' + Fmt.date(data.read_at) + ' · loopback only · zero API spend';
+      DOM.get('connection').textContent = 'File snapshot refreshed ' + Fmt.date(data.read_at) + (location.protocol === 'https:' ? ' · private hosted workspace · paid fallback blocked' : ' · loopback only · zero API spend');
     } catch (err) {
       const connection = DOM.get('connection');
       connection.className = 'error';

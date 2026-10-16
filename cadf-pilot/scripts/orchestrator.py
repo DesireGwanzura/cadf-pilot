@@ -187,17 +187,27 @@ class Worker:
             except ProcessLookupError: pass
             process.wait(timeout=3)
 
+    def job_context(self, job):
+        store = json.loads(serve.read_file(self.root, '.agents/PROJECTS.json'))
+        saved = next(j for j in store['jobs'] if j['id'] == job['id'])
+        project = next(p for p in store['projects'] if p['id'] == saved['project_id'])
+        return saved, project
+
+    def dispatched(self, job):
+        with serve.project_transaction(self.root) as store:
+            saved = next(j for j in store['jobs'] if j['id'] == job['id'])
+            saved['dispatched_at'] = datetime.now(timezone.utc).isoformat()
+            serve.record_event(store, job['project_id'], 'request_dispatched', job['id']+' sent to CLI', 'CADF orchestrator')
+
     def execute(self, job):
         runs=self.runtime/'runs'
         directory=runs/job['id']
         process=None
         try:
-            store=json.loads(serve.read_file(self.root,'.agents/PROJECTS.json'))
-            saved=next(j for j in store['jobs'] if j['id']==job['id'])
+            saved, project = self.job_context(job)
             if self.stopping.is_set() or saved['status']=='CANCEL_REQUESTED':
                 self.finish(job,'PAUSED','Cancelled before launch; no provider call made.'); return
             if saved['status']!='RUNNING': return
-            project=next(p for p in store['projects'] if p['id']==saved['project_id'])
             reason=scheduling.hold_reason(dict(saved,status='APPROVED'),project)
             if reason:
                 self.finish(job,'FAILED','Dispatch preflight: '+reason); return
@@ -208,17 +218,16 @@ class Worker:
             with (directory/'worker.log').open('wb') as output:
                 process=subprocess.Popen(command,cwd=directory,env=environment,stdin=subprocess.PIPE,
                                          stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
-                with serve.project_transaction(self.root) as store:
-                    saved = next(j for j in store['jobs'] if j['id'] == job['id'])
-                    saved['dispatched_at'] = datetime.now(timezone.utc).isoformat()
-                    serve.record_event(store, job['project_id'], 'request_dispatched', job['id']+' sent to CLI', 'CADF orchestrator')
+                self.dispatched(job)
                 process.stdin.write(job['prompt'].encode() if job['worker']=='codex' else b'')
                 process.stdin.close()
                 start=time.monotonic()
                 while process.poll() is None:
                     self.heartbeat('RUNNING',job['id'])
-                    store=json.loads(serve.read_file(self.root,'.agents/PROJECTS.json'))
-                    status=next(j['status'] for j in store['jobs'] if j['id']==job['id'])
+                    saved, _ = self.job_context(job)
+                    status = saved['status']
+                    if status not in {'RUNNING', 'CANCEL_REQUESTED'}:
+                        self.terminate(process); return
                     if self.stopping.is_set() or status=='CANCEL_REQUESTED':
                         self.terminate(process); self.finish(job,'PAUSED','Stopped by owner or dashboard shutdown; resuming requires a fresh approved job.'); return
                     if time.monotonic()-start > job['timeout_seconds'] or (directory/'worker.log').stat().st_size > 2_000_000:

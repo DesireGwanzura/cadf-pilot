@@ -54,3 +54,6 @@ Status: DEFERRED until implementation-worker capability is designed and approved
 Date: 2026-10-16. Origin: owner request; recorded by Codex.
 Proposal: a bounded child project can read an explicitly connected application's authorized data, analyze changes and report to its parent project. A schedule, webhook or parent event may propose a run. Future controls must include approved scope, connector permissions, event deduplication, cooldowns, run/usage limits, provenance, cancellation and owner approval before external writes. Reuse approved orchestration rather than starting an unbounded agent loop.
 Status: DEFERRED at the owner's explicit request. No trigger, schedule, connector or mini-project execution is being implemented or activated in the hosting phase.
+
+## IDEA-008 — Free-only Groq and Cerebras providers
+Owner requested this after public HTTPS hosting. Implement on develop, then promote through checks to main. Verify actual free-account eligibility, available models (including supported GPT open-weight models), quotas, secure key storage and billing-disabled behavior. No paid fallback. Status: NEXT, not connected.

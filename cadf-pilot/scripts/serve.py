@@ -28,7 +28,7 @@ DOCUMENTS = ['docs/CURRENT-STATE.md', 'AGENTS.md', 'docs/DECISIONS.md', 'docs/CO
              'docs/IMPLEMENTATION.md', 'docs/TOOLING.md', 'docs/REVIEW-APP.md',
              'docs/GEMINI-REVIEW.md', 'docs/PROJECT-BRIEF.md', 'docs/LIVE-HANDOFF.md',
              'docs/IDEAS.md', 'docs/INTEGRATIONS.md', 'docs/CONVERSATIONS.md', 'docs/PROJECT-MANAGEMENT.md', 'docs/MARKETING-PLAN.md', 'docs/ORCHESTRATOR.md']
-ASSETS = {'/': ('web/index.html', 'text/html'),
+ASSETS = {'/hosted-client.js': ('web/hosted-client.js', 'text/javascript'), '/': ('web/index.html', 'text/html'),
           '/app.js': ('web/app.js', 'text/javascript'),
           '/supervision.js': ('web/supervision.js', 'text/javascript'),
           '/workspace.js': ('web/workspace.js', 'text/javascript'),
@@ -570,18 +570,22 @@ class Handler(BaseHTTPRequestHandler):
                 or not secrets.compare_digest(self.headers.get('X-CADF-Token', ''), WRITE_TOKEN)):
             self.respond(403, b'{"error":"Same-origin owner session required. Refresh the page."}')
             return
-        if urlsplit(self.path).path != '/api/projects':
+        if urlsplit(self.path).path not in {'/api/projects', '/api/runner'}:
             self.respond(404, b'{"error":"Not found"}')
             return
         try:
             if self.headers.get('Content-Type') != 'application/json':
                 raise ValueError('Content-Type must be application/json')
             length = int(self.headers.get('Content-Length', '0'))
-            if not 0 < length <= 20000:
+            if not 0 < length <= (150000 if urlsplit(self.path).path == '/api/runner' else 20000):
                 raise ValueError('Request must contain 1–20000 bytes')
             self.connection.settimeout(5)
             payload = json.loads(self.rfile.read(length))
-            result = update_project(payload, ROOT)
+            if urlsplit(self.path).path == '/api/runner':
+                import runner_bridge
+                result = runner_bridge.handle(payload, ROOT)
+            else:
+                result = update_project(payload, ROOT)
             self.respond(201 if payload.get('action') == 'create' else 200, json.dumps(result).encode())
         except Conflict as error:
             self.respond(409, json.dumps({'error': str(error)}).encode())
