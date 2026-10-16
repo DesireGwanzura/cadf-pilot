@@ -1,0 +1,42 @@
+{
+  "agents": [
+    {
+      "name": "ChatGPT",
+      "role": "Planning through Codex account route",
+      "installation": "Available through existing subscription (user reported)",
+      "authentication": "Standalone chat is separate; CADF planning uses the signed-in Codex CLI.",
+      "participation": "Coordinator proposals await owner approval before execution."
+    },
+    {
+      "name": "Gemini",
+      "role": "Planning through Antigravity",
+      "installation": "Gemini CLI 0.64.0 installed",
+      "authentication": "Standalone CLI authorization was confirmed, but service access was rejected. AG is the configured planning route.",
+      "participation": "Gemini Flash Low reviews coordinator proposals; quota availability is checked by actual dispatch."
+    },
+    {
+      "name": "Codex",
+      "role": "Planner and implementation contributor",
+      "installation": "CLI 0.154.0-alpha.6.2 available",
+      "authentication": "ChatGPT login verified 2026-10-16T04:28:30.897663+00:00",
+      "participation": "Current UI and supervised workflow implementation submitted for owner review; no independent approval claimed."
+    },
+    {
+      "name": "Antigravity",
+      "role": "Planning, drafting and independent review",
+      "installation": "macOS app 2.23.1 installed",
+      "authentication": "Existing Google account access verified by real agy response; CLI paid-credit fallback disabled.",
+      "participation": "Six installed model profiles exposed as separate contacts. No fresh inference during this UI verification."
+    },
+    {
+      "name": "Grok",
+      "role": "Future project contributor",
+      "installation": "Owner has free Grok website/app access",
+      "authentication": "Not verified by CADF; no automated connection",
+      "participation": "On standby at owner request. Manual handoff available; no tasks dispatched."
+    }
+  ],
+  "observed_at": "2026-10-16T04:54:30.922150+00:00",
+  "notice": "Recorded observations, not process monitoring or live agent presence.",
+  "configuration_reviewed": "2026-10-16"
+}

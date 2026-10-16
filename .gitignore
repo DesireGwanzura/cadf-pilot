@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.*
+node_modules/
+**/.agents/.projects.lock
+**/.agents/.projects-*
+.cadf-runtime/
+# Local project briefs, conversations and campaign drafts are private operational data.
+**/.agents/PROJECTS.json
+
+# Derived private conversation record files
+**/.agents/project-records/

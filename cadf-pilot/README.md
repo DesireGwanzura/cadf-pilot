@@ -1,32 +1,52 @@
-# CADF pilot
+# CADF command centre
 
-Local collaboration bootstrap. No cloud services, paid API dependencies or command center are required. External participants have not yet reviewed this baseline.
+A local, chat-led workspace for projects, agent coordination, delivery tracking and marketing preparation. Built with Python's standard library and HTML/CSS/JavaScript. No new paid API or cloud service is required.
 
-## Start here
-Requirements: Git, Python 3, Bash.
+## Run
+
+From this application directory:
 
 ```sh
+python3 scripts/serve.py --port 8765 --orchestrate
+```
+
+Open http://127.0.0.1:8765. Omit `--orchestrate` for a UI-only session. Stop with Ctrl+C. The dashboard binds only to localhost. It creates the private project store from `.agents/PROJECTS.template.json` when absent.
+
+## Use
+
+1. Submit a project name and a brief. The Codex/ChatGPT-account and Gemini/AG planners propose outcomes and assignments using existing account quota.
+2. Review the exact plan in Team chat → Plan review. No execution tasks start before your approval.
+3. Converse privately with an agent or broadcast in the team room. Enter sends; Shift+Enter starts a new line. Each room keeps separate context and drafts.
+4. Reply as Decision or Requirement change to record a versioned change. Changed scope requires a revised approved plan.
+5. View Table/Kanban/Gantt, artifacts and documents under Project workspace. Adjust dates/priority. Download Word, formatted HTML or Markdown on demand.
+6. Accept delivered artifacts and close finished projects.
+
+The interface has light/dark/system themes, section tabs, search, sorting, filters, pagination and automatic snapshot refresh. Marketing displays actual local drafts and explicit connection gaps. Storage is a future feature.
+
+## Important boundaries
+
+The worker currently executes bounded text planning, drafting and review. It does not autonomously edit project code, search the live web, contact customers, apply for jobs, publish posts or deploy. Those adapters remain future work. Meta is not connected. Grok is manual/standby. AG model availability does not establish remaining quota. No automatic paid fallback is allowed.
+
+Read **docs/CURRENT-STATE.md** first for the full current handoff, known limitations and test evidence. Historical documents describe earlier setup decisions.
+
+## Verify
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+node --check web/app.js
+node --check web/supervision.js
+node --check web/workspace.js
 bash scripts/check.sh
-git status
 ```
 
-State files intentionally use JSON syntax (valid YAML 1.2), validated with Python's standard library. Keep this syntax when editing.
+Automated model tests use simulated processes, not live paid inference. Browser fixtures are kept outside the source application.
 
-## Who goes next
-1. Gemini reviews the actual bootstrap using docs/GEMINI-REVIEW.md. The files already exist; do not bootstrap again.
-2. The coordinator integrates corrections and records the human baseline decision. SETUP-001 becomes COMPLETED only after that review/integration.
-3. ChatGPT and Gemini each receive the same brief/template and produce their own independent report. Start a READY task only after dependencies are complete; only the coordinator updates shared state. READY does not mean the task has started.
-4. Freeze both reports, then begin reciprocal review. ChatGPT consolidates; Gemini reviews technical findings; the human approves the baseline.
-5. Codex and Antigravity receive bounded engineering tasks on separate branches/worktrees. A command center follows a demonstrated handoff workflow.
+## Records and privacy
 
-Read AGENTS.md and docs/PROJECT-BRIEF.md before joining. Use docs/HANDOFF-TEMPLATE.md for evidence. Review tasks can be handed over as files if an external tool lacks repository access. No MCP/GitHub write capability is assumed.
+`.agents/PROJECTS.json` holds local projects, messages, versions, jobs and campaign drafts; `.agents/project-records/` mirrors versioned documents. `.cadf-runtime/` holds worker outputs. These private paths are ignored by Git and excluded from downloadable source bundles. This is a single-user local app, not an encrypted multi-user service.
 
-## Connect GitHub when available
-Create an empty private cadf-pilot repository in your own account, then run these commands with its actual URL:
+The owner authorized publication of `cadf/command-centre` and a draft PR into `develop`. Independent review, integration and production approval remain pending.
 
-```sh
-git remote add origin YOUR_REPOSITORY_URL
-git push -u origin main
-```
+## Hosting and native-client preparation
 
-Do not paste credentials into repository files. Git authentication is configured outside this project. The remote URL is the only missing input for publishing; local work and review can proceed now.
+Read [hosting options](docs/HOSTING-OPTIONS.md) and [release/data synchronization architecture](docs/RELEASE-AND-SYNC.md). Remote `develop` and `testing` branches now exist at the original main baseline; the application is proposed separately through `cadf/command-centre`. CI checks are included, but no hosted deployment, native Mac client or automatic updater is claimed. Mini-project triggers are deferred.

@@ -1,0 +1,35 @@
+{
+  "project": {
+    "name": "CADF pilot",
+    "phase": "BOOTSTRAP_REVIEW",
+    "budget": "R0 additional expenditure",
+    "coordinator": "Human owner"
+  },
+  "notice": "State reconstructed from the uploaded protocol on 2026-10-16T04:28:30.897663+00:00. Missing original state was not recoverable. No independent review or research is claimed.",
+  "flow": [
+    {
+      "name": "Bootstrap review",
+      "state": "Pending Gemini review"
+    },
+    {
+      "name": "Independent discovery",
+      "state": "Waiting for baseline acceptance"
+    },
+    {
+      "name": "Consolidation",
+      "state": "Not started"
+    },
+    {
+      "name": "Collaboration",
+      "state": "Command centre implementation only"
+    },
+    {
+      "name": "Peer review",
+      "state": "Required before acceptance"
+    },
+    {
+      "name": "Human acceptance",
+      "state": "Pending"
+    }
+  ]
+}
