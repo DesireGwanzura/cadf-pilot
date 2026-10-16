@@ -1,0 +1,111 @@
+{
+  "tasks": [
+    {
+      "id": "SETUP-001",
+      "title": "Review and accept the uploaded bootstrap",
+      "owner": "Codex",
+      "reviewer": "Gemini",
+      "status": "READY_FOR_REVIEW",
+      "dependencies": [],
+      "deliverables": [
+        "AGENTS.md",
+        "docs/GEMINI-REVIEW.md"
+      ],
+      "acceptance_criteria": [
+        "Gemini submits an independent bootstrap review",
+        "Human integrates and accepts baseline"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "BA-001",
+      "title": "Independent workflow analysis",
+      "owner": "ChatGPT",
+      "reviewer": "Gemini",
+      "status": "READY",
+      "dependencies": [
+        "SETUP-001"
+      ],
+      "deliverables": [
+        "docs/research/independent/chatgpt/report.md"
+      ],
+      "acceptance_criteria": [
+        "Freeze independent report before peer access"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "BA-002",
+      "title": "Independent technical analysis",
+      "owner": "Gemini",
+      "reviewer": "ChatGPT",
+      "status": "READY",
+      "dependencies": [
+        "SETUP-001"
+      ],
+      "deliverables": [
+        "docs/research/independent/gemini/report.md"
+      ],
+      "acceptance_criteria": [
+        "Freeze independent report before peer access"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "BASELINE-001",
+      "title": "Consolidate independent findings",
+      "owner": "ChatGPT",
+      "reviewer": "Gemini",
+      "status": "READY",
+      "dependencies": [
+        "BA-001",
+        "BA-002"
+      ],
+      "deliverables": [
+        "docs/research/consolidated/baseline.md"
+      ],
+      "acceptance_criteria": [
+        "Record disagreements and human acceptance"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "APP-001",
+      "title": "Restore shared records and implement command centre",
+      "owner": "Codex",
+      "reviewer": "Antigravity",
+      "status": "READY_FOR_REVIEW",
+      "dependencies": [],
+      "deliverables": [
+        "web/index.html",
+        "scripts/serve.py",
+        "docs/IMPLEMENTATION.md"
+      ],
+      "acceptance_criteria": [
+        "Display real file records and explicit unavailable states",
+        "Serve only allowlisted files on loopback",
+        "Pass structural and HTTP tests"
+      ],
+      "evidence": [
+        "docs/IMPLEMENTATION.md"
+      ]
+    },
+    {
+      "id": "AUTH-001",
+      "title": "Connect Gemini with personal Google account",
+      "owner": "Human owner",
+      "reviewer": "Codex",
+      "status": "BLOCKED",
+      "dependencies": [],
+      "deliverables": [
+        "docs/TOOLING.md"
+      ],
+      "acceptance_criteria": [
+        "Sign in without enabling API billing",
+        "Record verified outcome"
+      ],
+      "evidence": [],
+      "blocker": "Google rejected Gemini CLI personal-account access after browser sign-in; provider directed migration to Antigravity."
+    }
+  ]
+}

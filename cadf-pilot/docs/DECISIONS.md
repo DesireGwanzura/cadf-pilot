@@ -15,3 +15,11 @@ Keep one writer for canonical task/state files during the pilot. This avoids pre
 ## D004 — Dependency-free state parsing
 Status: bootstrap implementation choice, awaiting review.
 State files use JSON syntax, a YAML 1.2 subset, so Python's standard library can validate them. Preserve that syntax until a reviewed YAML parser is introduced.
+
+## D005 — Owner-requested command centre
+Status: owner requested implementation in current task; implementation pending review.
+The repository now exists at DesireGwanzura/cadf-pilot. Main is the owner-confirmed baseline. Implement a local read-only dashboard now; this supersedes D002 deferral and its outdated remote claim. No research review, baseline acceptance or external participant activity is implied.
+
+## D006 — Reconstruct missing upload contents
+Status: implementation choice awaiting review.
+Original Git upload omitted .agents and empty research folders. Restore records from the written protocol, explicitly marking unknown history. Preserve JSON syntax in YAML files and single-coordinator writes.
