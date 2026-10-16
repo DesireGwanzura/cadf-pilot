@@ -11,11 +11,20 @@ spec = importlib.util.spec_from_file_location('serve', Path(__file__).resolve().
 serve = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(serve)
 
+def copy_test_workspace(source, destination):
+    # Tests must never inherit private chats, records, or runner state.
+    shutil.copytree(source, destination, ignore=shutil.ignore_patterns(
+        'PROJECTS.json', '.cadf-runtime', 'project-records', '.projects.lock',
+        '.projects-*', '.env', '.env.*', '__pycache__', 'node_modules', '.git'))
+    shutil.copyfile(destination / '.agents/PROJECTS.template.json',
+                    destination / '.agents/PROJECTS.json')
+
+
 class SnapshotTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name) / 'workspace'
-        shutil.copytree(serve.ROOT, self.root)
+        copy_test_workspace(serve.ROOT, self.root)
     def tearDown(self): self.temp.cleanup()
     def test_disk_changes(self):
         path = self.root / '.agents/TASKS.yaml'
@@ -40,7 +49,7 @@ class HttpTests(unittest.TestCase):
         cls.original_root = serve.ROOT
         cls.temp = tempfile.TemporaryDirectory()
         serve.ROOT = Path(cls.temp.name) / 'workspace'
-        shutil.copytree(cls.original_root, serve.ROOT)
+        copy_test_workspace(cls.original_root, serve.ROOT)
         cls.server = serve.ThreadingHTTPServer(('127.0.0.1', 0), serve.Handler)
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True); cls.thread.start()
         cls.url = 'http://127.0.0.1:' + str(cls.server.server_port)
