@@ -16,3 +16,11 @@ Rules are versioned and reviewable, not immutable. Human instructions take prece
 - Escalate unresolved disagreements after two review cycles, new spending, publishing/access changes, or material scope decisions. Routine reversible work within the assigned task can proceed.
 - Do not commit credentials, tokens, private transcripts or personal data. No paid API dependency, automatic external messages, or new service subscriptions without explicit authorization.
 - Run bash scripts/check.sh before handoff. The checker validates structure and task consistency, not actual independence, review authenticity or security.
+
+## Engineering standards
+Use https://github.com/Haufe-Lexware/api-style-guide for HTTP design and https://github.com/spring-projects/spring-framework/wiki/Code-Style for applicable code conventions. This Python/JS application keeps dependency-free, readable code; Java-specific rules apply when Java is introduced. The supplied Spring wiki URL currently redirects to the wiki home.
+
+The owner explicitly requested the command centre before the research baseline. That authorizes APP-001 only; it does not imply approval of other tasks.
+
+## Current owner workflow
+The owner explicitly delegated routine project planning and task assignment to the Codex/ChatGPT-account and Gemini/AG coordinators, subject to exact owner plan approval before execution. Read docs/CURRENT-STATE.md first. Canonical mutations now use the fcntl-locked, revision-checked project transaction; the old statement that no lock exists is historical. Preserve private-room context boundaries, zero extra spending, and honest connection/capability status. Latest owner UI work is assigned back to Codex; the earlier exclusive Antigravity web/ handoff has ended.

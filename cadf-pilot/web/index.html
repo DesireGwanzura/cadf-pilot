@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CADF · Collaborative AI Command Centre</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/supervision.js" defer></script>
+  <script src="/workspace.js" defer></script>
+  <link rel="stylesheet" href="/glass.css">
+  <script src="/app.js" defer></script>
+  <script src="/hosted-client.js" defer></script>
+</head>
+<body>
+  <aside>
+    <a class="brand" href="#conversation">
+      <span class="mark">C</span>
+      <span>CADF</span>
+      <span class="pilot">PILOT / 01</span>
+    </a>
+
+    <div class="sidebar-section-title">Workspace</div>
+    <nav aria-label="Workspace Navigation">
+      <a href="#conversation" class="active"><span class="nav-icon">◫</span> Team Chat</a>
+      <a href="#management"><span class="nav-icon">▤</span> Project workspace</a>
+      <a href="#projects"><span class="nav-icon">◇</span> Projects</a>
+      <a href="#orchestration"><span class="nav-icon">ϟ</span> Orchestrator</a>
+      <a href="#marketing"><span class="nav-icon">◉</span> Marketing</a>
+      <a href="#tasks"><span class="nav-icon">▦</span> Task board</a>
+      <a href="#overview"><span class="nav-icon">◈</span> Overview</a>
+      <a href="#agents"><span class="nav-icon">♧</span> Agents</a>
+      <a href="#reviews"><span class="nav-icon">⌕</span> Review Queue</a>
+      <a href="#activity"><span class="nav-icon">◷</span> Activity</a>
+      <a href="#documents"><span class="nav-icon">▧</span> Documents</a>
+      <a href="#storage"><span class="nav-icon">▱</span> Storage <small class="soon-tag">Later</small></a>
+    </nav>
+
+    <div class="sidefoot">
+      <div class="sidefoot-status"><span class="dot"></span> Local workspace active</div>
+      <div>R0 additional budget</div>
+      <div>Human acceptance required</div>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <div class="header-title-wrap">
+        <div>
+          <p class="eyebrow">Your collaborative workspace</p>
+          <h1>Your workspace<span class="pilot">CADF</span></h1>
+        </div>
+        <p class="sub">Ideas. People. Possibilities.</p>
+      </div>
+      <div class="header-actions">
+        <span id="phase" class="tag">Loading phase…</span>
+        <button id="refresh" aria-label="Refresh workspace records">↻ Refresh Records</button>
+      </div>
+    </header>
+
+    <div id="connection" role="status" aria-live="polite">Loading workspace records…</div>
+
+    <div class="content-body">
+      <section id="storage"><div class="sectionhead"><div><p class="eyebrow">On the roadmap</p><h2>Storage</h2></div></div><article class="storage-preview"><span class="feature-orb">▱</span><h3>A home for everything your team creates</h3><p>Shared files, folders and connected drives are planned for a future update.</p><p>For now, your agent deliverables and versioned records are available in Project workspace → Documents. Download them any time.</p><a href="#management">Open project workspace →</a><span class="tag">Not connected · no cloud uploads</span></article></section>
+      <!-- 1. TEAM CONVERSATION -->
+      <section id="conversation" class="active">
+        <div class="sectionhead">
+          <div>
+            <p class="eyebrow">The Shared Room</p>
+            <h2>Team chat</h2>
+          </div>
+          <label class="layout-1">
+            Active Project
+            <select id="chat-project" aria-label="Select active project for conversation"></select>
+          </label>
+        </div>
+
+        <div id="chat-plan-review" class="chat-plan-review"></div><div id="chat-shortcuts" class="chat-shortcuts" aria-label="Recent conversations"></div><div class="room-layout"><div class="conversation-list"><div class="inbox-title"><h3>Messages</h3><a href="#projects" aria-label="New project conversation">＋</a></div><input id="room-search" type="search" placeholder="Find an agent or group"><div class="inbox-tabs"><span>Everyone</span><span>Agents & groups</span></div><div id="room-list"></div><a class="new-room" href="#projects">＋ New project</a></div>
+          <div class="chat-main-column">
+            <div id="room-summary" class="room-summary">Select a project to join its team room.</div>
+            <div id="messages" class="messages" aria-live="polite"></div>
+
+            <form id="chat-form" class="chat-compose">
+              <label for="chat-input">Your message</label>
+              <textarea id="chat-input" aria-label="Message" rows="1" maxlength="10000" required placeholder="Type a message…"></textarea>
+
+              <div class="compose-actions">
+                <details class="recipient-settings"><summary>Agent & model settings</summary><div class="compose-recipient-wrap">
+                  <label for="chat-recipient" class="layout-2">Recipient:</label>
+                  <label>AG model<select id="chat-model"><option value="default">Account default</option><option value="gemini-3.8-flash-high">gemini-3.8-flash-high</option><option value="gemini-3.8-flash-medium">gemini-3.8-flash-medium</option><option value="gemini-3.8-flash-low">gemini-3.8-flash-low</option><option value="claude-sonnet-4-6">claude-sonnet-4-6</option><option value="claude-opus-4-6-thinking">claude-opus-4-6-thinking</option><option value="gpt-oss-120b-medium">gpt-oss-120b-medium</option></select></label><select id="chat-recipient">
+                    <option value="team">Everyone · group broadcast</option>
+                    <option value="codex">Codex (ChatGPT worker)</option>
+                    <option value="antigravity">Antigravity (Google worker)</option><option value="grok">Grok · manual handoff</option>
+                  </select>
+                </div></details>
+                <button id="chat-send" type="submit" class="btn-primary">Share with everyone</button>
+              </div>
+              <p id="chat-send-note" class="muted">A shared note is saved for the team. It does not request an AI response.</p>
+              <p id="chat-feedback" role="status"></p><details id="grok-handoff"><summary>Grok · free account handoff</summary><p>Grok is a manual participant, not an automated worker.</p><button id="grok-brief" type="button">Download project brief</button> <a href="https://grok.com" target="_blank" rel="noopener noreferrer">Open Grok ↗</a><label>Paste Grok’s response<textarea id="grok-response" maxlength="30000" placeholder="Paste the actual response here"></textarea></label><button id="grok-import" type="button">Add response to conversation</button></details>
+            </form>
+          </div>
+
+          <aside class="attention-panel">
+            <p class="eyebrow">Needs Your Attention</p>
+            <h3>Execution Blockers</h3>
+            <div id="needs-you"></div>
+            <a href="#projects" class="jump-link">🚀 Manage project status →</a>
+            <a href="#orchestration" class="jump-link">⚡ View orchestrator queue →</a>
+            <a href="#documents" class="jump-link">📄 Open canonical records →</a>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 2. PROJECT MANAGEMENT -->
+      <section id="management">
+        <div class="sectionhead">
+          <div>
+            <p class="eyebrow">From Discussion to Delivery</p>
+            <h2>Project workspace</h2>
+          </div>
+          <label class="layout-3">
+            Selected Project
+            <select id="pm-project" aria-label="Select project for management"></select>
+          </label>
+        </div>
+
+        <div id="project-schedule" class="project-schedule"></div><div id="project-chat-records"></div><div id="agent-deliverables"></div><div id="visual-project-board"></div><details class="pm-summary-drawer"><summary>Project summary & lifecycle controls</summary><div id="pm-dashboard" class="pm-dashboard"></div></details>
+        <p id="pm-summary" role="status" class="layout-4 muted"></p>
+
+        <details id="pm-edit">
+          <summary>Requirements, discussion review & closeout</summary>
+          <div class="pm-edit-content">
+            <p class="muted">Review discussion in batches when convenient. Prefix chat notes with <code>Requirement:</code>, <code>Decision:</code>, <code>Update:</code> or <code>Idea:</code> to route them cleanly.</p>
+
+            <div class="overviewgrid">
+              <article>
+                <h3>Planned Deliverables & Milestones</h3>
+                <form id="pm-item-form" class="layout-5">
+                  <div class="layout-6">
+                    <label class="layout-7">
+                      Type
+                      <select id="pm-kind">
+                        <option value="deliverable">Deliverable</option>
+                        <option value="milestone">Milestone</option>
+                      </select>
+                    </label>
+                    <label class="layout-8">
+                      Name
+                      <input id="pm-title" maxlength="200" required placeholder="e.g. Core API Endpoint">
+                    </label>
+                  </div>
+                  <label>
+                    Done criteria
+                    <textarea id="pm-criteria" maxlength="2000" rows="2" required placeholder="What evidence is required to prove completion?"></textarea>
+                  </label>
+                  <button type="submit" class="layout-9 btn-primary">Add to Plan</button>
+                </form>
+                <div id="pm-items"></div>
+              </article>
+
+              <article>
+                <div class="layout-10">
+                  <h3>Discussion Review Batches</h3>
+                  <button id="pm-collect" class="btn-primary" type="button">Collect New Discussion</button>
+                </div>
+                <p class="muted">Extract unreviewed messages into an auditable batch without calling an external model.</p>
+                <div id="pm-batches" class="layout-11"></div>
+              </article>
+            </div>
+
+            <div class="overviewgrid">
+              <article>
+                <h3>Approve New Record Version</h3>
+                <form id="pm-version-form" class="layout-12">
+                  <div class="layout-13">
+                    <label class="layout-14">
+                      Source batch
+                      <select id="pm-batch" required></select>
+                    </label>
+                    <label class="layout-15">
+                      Record category
+                      <select id="pm-category">
+                        <option value="requirements">Requirements</option>
+                        <option value="decisions">Decisions</option>
+                        <option value="progress">Progress report</option>
+                        <option value="ideas">Ideas</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label>
+                    Full revised document
+                    <textarea id="pm-content" rows="6" maxlength="30000" required placeholder="Include full document text. Previous versions remain available for diff comparison."></textarea>
+                  </label>
+                  <button type="submit" class="layout-16 btn-primary">Approve & Save Version</button>
+                </form>
+                <div id="pm-versions"></div>
+              </article>
+
+              <article>
+                <h3>Project Closeout & Export</h3>
+                <p class="layout-17 muted">Accept all milestones, complete discussions, and record final outcomes to close the project.</p>
+                <form id="pm-close-form" class="layout-18">
+                  <label>
+                    Closeout summary
+                    <textarea id="pm-close-summary" rows="4" required maxlength="10000" placeholder="Delivered outcomes, verified evidence, remaining limitations, and follow-up projects..."></textarea>
+                  </label>
+                  <button type="submit" class="layout-19 btn-primary">Accept Closeout</button>
+                </form>
+                <div id="pm-closeout"></div>
+                <button id="pm-export" type="button" class="layout-20">Download Project Records (JSON)</button>
+              </article>
+            </div>
+
+            <p id="pm-feedback" role="status" class="layout-21"></p>
+          </div>
+        </details>
+      </section>
+
+      <!-- 3. PROJECTS PIPELINE -->
+      <section id="projects">
+        <div class="sectionhead">
+          <div>
+            <p class="eyebrow">Your Project Pipeline</p>
+            <h2>Projects</h2>
+          </div>
+          <label class="layout-22">
+            Filter Status
+            <select id="project-filter">
+              <option value="">All Projects</option>
+              <option>SUBMITTED</option>
+              <option>QUEUED</option>
+              <option>STARTED</option>
+              <option>PAUSED</option>
+              <option>COMPLETED</option>
+              <option>ARCHIVED</option>
+            </select>
+          </label>
+        </div>
+
+        <p class="layout-23 muted">Submit a brief, queue it, and record when work starts or pauses. Starting a project prepares an implementation plan job for your review.</p>
+
+        <div class="overviewgrid">
+          <article>
+            <h3 id="project-form-title">Submit a New Project</h3>
+            <p class="muted">Give your team a brief. The coordinators propose outcomes and assignments; you review before work starts. Planning uses your existing account quota.</p>
+            <form id="project-form" class="layout-24">
+              <label>
+                Project name
+                <input id="project-name" required maxlength="120" placeholder="e.g. CADF Visual Redesign">
+              </label>
+              <label>
+                What would you like to achieve?
+                <textarea id="project-brief" required maxlength="10000" rows="4" placeholder="Find opportunities, grow a business, plan a campaign, build something… Tell your team what matters."></textarea>
+              </label>
+              <label hidden>Optional outcomes<textarea id="project-deliverables" rows="3" maxlength="10000"></textarea></label>
+              <div class="layout-25">
+                <label hidden class="layout-26">
+                  Repository / Reference (optional)
+                  <input id="project-repository" maxlength="500" placeholder="e.g. github.com/owner/repo">
+                </label>
+                <label class="layout-27">
+                  Priority
+                  <select id="project-priority">
+                    <option value="NORMAL">Normal</option>
+                    <option value="HIGH">High</option>
+                    <option value="LOW">Low</option>
+                  </select>
+                </label>
+              </div>
+              <div class="project-actions">
+                <button id="project-save" type="submit" class="btn-primary">Submit Project</button>
+                <button id="project-cancel" type="button" hidden>Cancel Edit</button>
+              </div>
+            </form>
+            <p id="project-message" role="status" class="layout-28"></p>
+          </article>
+
+          <div>
+            <div id="projectcards" class="project-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. ORCHESTRATION & CONTROL ROOM -->
+      <section id="orchestration"><div id="coordinator-plans"></div><div id="dispatch-queue"></div><div id="readiness-cards"></div>
+        <div class="sectionhead">
+          <div>
+            <p class="eyebrow">Control Room</p>
+            <h2>Orchestrator</h2>
+          </div>
+          <span id="worker-state" class="tag">Checking worker…</span>
+        </div>
+
+        <p id="worker-notice" class="layout-29 muted"></p>
+
+        <form id="job-form" class="job-form">
+          <label class="layout-30">
+            Active Project
+            <select id="job-project" required></select>
+          </label>
+          <label class="layout-31">
+            Assigned Worker
+            <select id="job-worker">
+              <option value="codex">Codex (ChatGPT)</option>
+              <option value="antigravity">Antigravity (Google)</option>
+            </select>
+          </label>
+          <label class="layout-32">
+            Job Type
+            <select id="job-kind">
+              <option value="plan">Implementation Plan</option>
+              <option value="marketing">Marketing Strategy</option>
+              <option value="review">Independent Brief Review</option>
+            </select>
+          </label>
+          <label>AG model<select id="job-model"><option value="default">Account default</option><option value="gemini-3.8-flash-high">gemini-3.8-flash-high</option><option value="gemini-3.8-flash-medium">gemini-3.8-flash-medium</option><option value="gemini-3.8-flash-low">gemini-3.8-flash-low</option><option value="claude-sonnet-4-6">claude-sonnet-4-6</option><option value="claude-opus-4-6-thinking">claude-opus-4-6-thinking</option><option value="gpt-oss-120b-medium">gpt-oss-120b-medium</option></select></label>
+          <button type="submit" class="btn-primary">Request Worker Job</button>
+        </form>
+
+        <article><h3>Model team · plan → review → synthesis</h3><p>Three sequential account-quota calls. Review and approve the team brief before running. Stops on any failed response; no paid fallback or automatic retry.</p><label>Planner<select id="team-planner"><option value="gemini-3.8-flash-high">gemini-3.8-flash-high</option><option value="gemini-3.8-flash-medium">gemini-3.8-flash-medium</option><option value="gemini-3.8-flash-low">gemini-3.8-flash-low</option><option value="claude-sonnet-4-6">claude-sonnet-4-6</option><option value="claude-opus-4-6-thinking">claude-opus-4-6-thinking</option><option value="gpt-oss-120b-medium">gpt-oss-120b-medium</option></select></label><label>Reviewer<select id="team-reviewer"><option value="gemini-3.8-flash-high">gemini-3.8-flash-high</option><option value="gemini-3.8-flash-medium">gemini-3.8-flash-medium</option><option value="gemini-3.8-flash-low">gemini-3.8-flash-low</option><option value="claude-sonnet-4-6">claude-sonnet-4-6</option><option value="claude-opus-4-6-thinking">claude-opus-4-6-thinking</option><option value="gpt-oss-120b-medium">gpt-oss-120b-medium</option></select></label><label>Synthesizer<select id="team-synthesizer"><option value="gemini-3.8-flash-high">gemini-3.8-flash-high</option><option value="gemini-3.8-flash-medium">gemini-3.8-flash-medium</option><option value="gemini-3.8-flash-low">gemini-3.8-flash-low</option><option value="claude-sonnet-4-6">claude-sonnet-4-6</option><option value="claude-opus-4-6-thinking">claude-opus-4-6-thinking</option><option value="gpt-oss-120b-medium">gpt-oss-120b-medium</option></select></label><button id="team-request" type="button">Prepare team run for selected project</button></article><h3 class="layout-33">Active & Recent Jobs</h3>
+        <div id="jobcards" class="cards"></div>
+      </section>
+
+      <!-- 5. MARKETING STUDIO -->
+      <section id="marketing">
+        <div class="sectionhead">
+          <div>
+            <p class="eyebrow">Brand & Growth</p>
+            <h2>Marketing Studio</h2>
+          </div>
+          <span class="tag">Zero Ad Spend · Local Drafts</span>
+        </div>
+
+        <p class="layout-34 muted">Draft and approve campaign copy before external publication. No automatic posting or external ad spend is enabled.</p>
+
+        <div class="overviewgrid">
+          <article>
+            <h3>Create Campaign Draft</h3>
+            <form id="campaign-form" class="layout-35">
+              <div class="layout-36">
+                <label class="layout-37">
+                  Project / Brand
+                  <select id="campaign-project" required></select>
+                </label>
+                <label class="layout-38">
+                  Channel
+                  <select id="campaign-channel">
+                    <option>LinkedIn</option>
+                    <option>Facebook</option>
+                    <option>Instagram</option>
+                    <option>Threads</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                Campaign title
+                <input id="campaign-title" required maxlength="120" placeholder="e.g. CADF Command Centre Announcement">
+              </label>
+              <label>
+                Target audience
+                <input id="campaign-audience" required maxlength="500" placeholder="e.g. AI Engineers & Solo Founders">
+              </label>
+              <label>
+                Draft copy
+                <textarea id="campaign-content" required rows="5" maxlength="10000" placeholder="Post body text..."></textarea>
+              </label>
+              <label>
+                Release evidence / Verified claims
+                <textarea id="campaign-evidence" rows="2" maxlength="2000" placeholder="What verified capability supports these claims?"></textarea>
+              </label>
+              <div class="project-actions">
+                <button id="campaign-save" type="submit" class="btn-primary">Save Draft</button>
+                <button id="campaign-cancel" type="button" hidden>Cancel Edit</button>
+              </div>
+            </form>
+            <p id="campaign-message" role="status" class="layout-39"></p>
+          </article>
+
+          <div>
+            <div id="campaigncards" class="project-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. TASK BOARD -->
+      <section id="tasks">
+        <div class="sectionhead">
+          <div>
+            <p class="eyebrow">Delivery & Governance</p>
+            <h2>Task board</h2>
+          </div>
+          <div class="filters">
+            <label class="layout-40">
+              Search
+              <input id="search" type="search" placeholder="Filter by ID, title, owner...">
+            </label>
+            <label class="layout-41">
+              Status
+              <select id="status"><option value="">All Statuses</option></select>
+            </label>
+          </div>
+        </div>
+
+        <div class="task-view-toggle"><button id="task-list-view" class="selected">▤ List</button><button id="task-card-view">▦ Board</button><span>Open a task to view acceptance criteria</span></div><div id="grouped-task-board"></div><div class="tablewrap" hidden>
+          <table>
+            <thead>
+              <tr>
+                <th>Task</th>
+                <th>Owner / Reviewer</th>
+                <th>Status</th>
+                <th>Dependencies</th>
+              </tr>
+            </thead>
+            <tbody id="taskrows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 7. OVERVIEW & WORKSPACE -->
+      <section id="overview">
+        <div class="sectionhead">
+          <div>
+            <p class="eyebrow">Governance & State</p>
+            <h2>Dashboard</h2>
+          </div>
+        </div>
+
+        <p class="dashboard-subtitle">Monitor your projects and your team, all in one place.</p><div id="visual-analytics"></div><details class="dashboard-records"><summary>Workspace records & delivery protocol</summary><div id="metrics" class="layout-42 metrics"></div>
+
+        <div class="overviewgrid">
+          <article>
+            <p class="eyebrow">Collaboration Flow</p>
+            <h3>Sequential Phase Milestones</h3>
+            <div id="flow"></div>
+          </article>
+
+          <article>
+            <p class="eyebrow">Source of Truth</p>
+            <h3>Local Git & Provenance</h3>
+            <p id="notice" class="layout-43 muted"></p>
+            <dl id="git" class="layout-44"></dl>
+          </article>
+        </div>
+      </details></section>
+
+      <!-- 8. PARTICIPANTS & TOOLS -->
+      <section id="agents">
+        <div class="sectionhead">
+          <div>
+            <p class="eyebrow">Agents</p>
+            <h2>Your agents</h2>
+          </div>
+          <span class="muted">Recorded local observations</span>
+        </div>
+        <div id="agent-availability"></div><div id="agentcards" class="cards"></div>
+      </section>
+
+      <!-- 9. REVIEW QUEUE -->
+      <section id="reviews">
+        <div class="sectionhead">
+          <div>
+            <p class="eyebrow">Quality Gate</p>
+            <h2>Independent Review Queue</h2>
+          </div>
+          <span class="tag">4-Eyes Principle Enforced</span>
+        </div>
+        <div id="reviewcards" class="cards"></div>
+      </section>
+
+      <!-- 10. ACTIVITY & AUDIT -->
+      <section id="activity">
+        <div class="sectionhead">
+          <div>
+            <p class="eyebrow">Audit Trail</p>
+            <h2>Activity & Event Stream</h2>
+          </div>
+          <span class="muted">Append-only audit convention</span>
+        </div>
+        <article>
+          <div id="events"></div>
+        </article>
+      </section>
+
+      <!-- 11. DECISIONS & RECORDS -->
+      <section id="documents">
+        <div class="sectionhead">
+          <div>
+            <p class="eyebrow">Canonical Files</p>
+            <h2>Workspace documents</h2>
+          </div>
+          <label class="layout-45">
+            Document
+            <select id="document"></select>
+          </label>
+        </div>
+        <pre id="documentbody"></pre>
+      </section>
+
+      <!-- Preserved container for compatibility with any code looking for #audit-records -->
+      <details id="audit-records" hidden>
+        <summary>Audit Records</summary>
+      </details>
+    </div>
+
+    <footer>
+      CADF Command Centre · Collaborative AI Development Framework · Loopback only · Zero additional expenditure.
+    </footer>
+  </main>
+
+  <!-- Dialog for task details -->
+  <dialog id="detail">
+    <button id="close" aria-label="Close task details">✕ Close</button>
+    <div id="detailbody"></div>
+  </dialog>
+</body>
+</html>

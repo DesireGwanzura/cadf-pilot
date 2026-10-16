@@ -1,0 +1,61 @@
+name: CADF checks
+
+on:
+  pull_request:
+    branches: [develop, testing, main]
+  push:
+    branches: [develop, testing, main, 'cadf/**', 'feature/**', 'fix/**', 'release/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: CADF checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: cadf-pilot
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Check out the proposed code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, verified 2026-10-16
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Reject tracked private operational files
+        working-directory: .
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          forbidden = {'PROJECTS.json', '.cadf-runtime', 'project-records', 'node_modules'}
+          bad = [name for name in paths if name and any(
+              part in forbidden or part == '.projects.lock' or part.startswith('.projects-')
+              or part == '.env' or part.startswith('.env.')
+              for part in pathlib.PurePosixPath(name).parts)]
+          if bad:
+              raise SystemExit('Private operational paths must not be tracked: ' + ', '.join(bad))
+          PY
+      - name: Check repository structure
+        run: bash scripts/check.sh
+      - name: Run unit and local HTTP integration tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Check browser scripts
+        run: |
+          node --check web/app.js
+          node --check web/workspace.js
+          node --check web/supervision.js
+      - name: Check whitespace
+        run: git diff --check HEAD^ HEAD
+
+# This workflow validates code only. No model calls, deployment credentials,
+# remote workers, paid runners, cloud provisioning or production publishing.

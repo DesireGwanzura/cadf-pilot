@@ -1,0 +1,16 @@
+{
+  "reviews": [
+    {
+      "task": "SETUP-001",
+      "reviewer": "Gemini",
+      "status": "PENDING",
+      "evidence": "No reviewer submission available"
+    },
+    {
+      "task": "APP-001",
+      "reviewer": "Antigravity",
+      "status": "PENDING",
+      "evidence": "No reviewer submission available"
+    }
+  ]
+}
