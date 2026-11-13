@@ -368,12 +368,14 @@ const WorkUI = (() => {
 
   const state = {
     view: 'table',
+    download: 'csv',
     sort: { key: null, direction: 1 },
     busy: false,
     feedback: { text: '', error: false },
     ticketDraft: { title: '', description: '', owner: '', type: 'task', priority: 'NORMAL', estimate_days: '1', start_date: '', due_date: '' },
     intakeDraft: { text: '', replace: false, source: 'intake', team: null },
     host: null,
+    setupHost: null,
     data: null,
     projectId: null,
     pending: false,
@@ -390,8 +392,9 @@ const WorkUI = (() => {
 
   function setFeedback(text, error = false) {
     state.feedback = { text, error };
-    const line = state.host?.querySelector('.wk-feedback');
-    if (line) {
+    for (const root of [state.host, state.setupHost]) {
+      const line = root?.querySelector('.wk-feedback');
+      if (!line) continue;
       line.textContent = text;
       line.classList.toggle('error', error);
     }
@@ -420,11 +423,12 @@ const WorkUI = (() => {
 
   function isTyping() {
     const active = document.activeElement;
-    return Boolean(state.host && active && state.host.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName));
+    return Boolean(active && [state.host, state.setupHost].some(root => root?.contains(active)) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName));
   }
 
-  function update(host, data, projectId) {
+  function update(host, data, projectId, setupHost = null) {
     state.host = host;
+    state.setupHost = setupHost;
     state.data = data;
     state.projectId = projectId;
     if (isTyping()) {
@@ -440,18 +444,41 @@ const WorkUI = (() => {
     if (!host) return;
     const project = currentProject();
     const work = currentWork();
+    const setup = state.setupHost;
     host.classList.add('wk-root');
+    setup?.classList.add('wk-root');
     if (!project || !work) {
       host.replaceChildren(el('p', 'Select or submit a project to see its work plan.', 'muted'));
+      setup?.replaceChildren(el('p', 'Select or submit a project to see its setup.', 'muted'));
       return;
     }
-    const parts = [header(project, work)];
-    if (work.warnings.length) parts.push(warnings(work));
-    parts.push(downloads(project), tabs(), panel(project, work));
+    const toolbar = el('div', undefined, 'wk-toolbar');
+    toolbar.append(tabs(), downloads(project));
+    host.replaceChildren(toolbar, panel(project, work), feedbackLine());
+    if (setup) {
+      const parts = [projectPicker(), header(project, work)];
+      if (work.warnings.length) parts.push(warnings(work));
+      parts.push(intakeView(project), feedbackLine());
+      setup.replaceChildren(...parts);
+    }
+  }
+
+  function projectPicker() {
+    const choice = select(state.data.projects.projects.map(item => [item.id, item.name]), state.projectId, 'Project');
+    choice.addEventListener('change', () => {
+      const main = document.getElementById('pm-project');
+      if (!main) return;
+      main.value = choice.value;
+      choice.blur();
+      main.dispatchEvent(new Event('change'));
+    });
+    return field('Selected project', choice);
+  }
+
+  function feedbackLine() {
     const feedback = el('p', state.feedback.text, 'wk-feedback' + (state.feedback.error ? ' error' : ''));
     feedback.setAttribute('role', 'status');
-    parts.push(feedback);
-    host.replaceChildren(...parts);
+    return feedback;
   }
 
   function header(project, work) {
@@ -491,13 +518,16 @@ const WorkUI = (() => {
     const bar = el('div', undefined, 'wk-downloads');
     bar.setAttribute('role', 'group');
     bar.setAttribute('aria-label', 'Download this work plan');
-    bar.append(el('strong', 'Download'));
-    for (const [format, label] of DOWNLOADS) {
-      const link = el('a', '↓ ' + label, 'download-link');
-      link.href = '/api/export?' + new URLSearchParams({ project: project.id, format });
-      link.setAttribute('download', '');
-      bar.append(link);
-    }
+    const choice = select(DOWNLOADS, state.download, 'Download format');
+    const go = el('a', '↓ Download', 'download-link');
+    const link = () => {
+      state.download = choice.value;
+      go.href = '/api/export?' + new URLSearchParams({ project: project.id, format: choice.value });
+    };
+    link();
+    choice.addEventListener('change', link);
+    go.setAttribute('download', '');
+    bar.append(choice, go);
     return bar;
   }
 
@@ -505,7 +535,7 @@ const WorkUI = (() => {
     const bar = el('div', undefined, 'wk-tabs');
     bar.setAttribute('role', 'tablist');
     bar.setAttribute('aria-label', 'Work views');
-    for (const [id, label] of [['table', 'Table'], ['kanban', 'Kanban'], ['gantt', 'Gantt'], ['charts', 'Charts'], ['intake', 'Intake']]) {
+    for (const [id, label] of [['table', 'Table'], ['kanban', 'Kanban'], ['gantt', 'Gantt'], ['charts', 'Charts']]) {
       const tab = button(label, () => {
         state.view = id;
         render();
@@ -520,7 +550,7 @@ const WorkUI = (() => {
   function panel(project, work) {
     const body = el('div', undefined, 'wk-panel');
     body.setAttribute('role', 'tabpanel');
-    const views = { table: tableView, kanban: kanbanView, gantt: ganttView, charts: chartsView, intake: intakeView };
+    const views = { table: tableView, kanban: kanbanView, gantt: ganttView, charts: chartsView };
     body.append((views[state.view] || tableView)(project, work));
     return body;
   }
@@ -533,7 +563,7 @@ const WorkUI = (() => {
     if (!work.items.length) {
       box.append(el('p', project.mode === 'ai'
         ? 'Tickets appear here once the approved plan starts, and from documents the agents deliver.'
-        : 'No tickets yet. Add one below or paste a list in the Intake tab.', 'muted'));
+        : 'No tickets yet. Add one below or paste a list in Project setup.', 'muted'));
     } else {
       const wrap = el('div', undefined, 'wk-table-wrap');
       const table = el('table', undefined, 'wk-table');
@@ -937,14 +967,14 @@ const WorkUI = (() => {
       return card;
     }
     for (const entry of bars) {
-      const row = el('div', undefined, 'wk-bar-row');
+      const row = el('div', undefined, 'wk-bar-row wk-bar-stacked');
       const track = el('div', undefined, 'wk-track');
       const open = el('span', undefined, 'wk-fill wk-fill-doing');
       open.style.width = entry.openShare + '%';
       const done = el('span', undefined, 'wk-fill wk-fill-done');
       done.style.width = entry.doneShare + '%';
       track.append(open, done);
-      row.append(el('span', entry.owner + (entry.kind === 'agent' ? ' 🤖' : '')), track, el('b', entry.open + ' open / ' + entry.done + ' done · ' + entry.items + ' tickets'));
+      row.append(el('span', entry.owner + (entry.kind === 'agent' ? ' 🤖' : '')), track, el('small', entry.open + 'd open · ' + entry.done + 'd done · ' + entry.items + ' tickets', 'wk-bar-note'));
       card.append(row);
     }
     return card;
@@ -953,7 +983,7 @@ const WorkUI = (() => {
   function burndownChart(work) {
     const card = chartCard('Burndown', 'Remaining working days: ideal vs actual');
     if (!work.burndown.length) {
-      card.append(el('p', 'Needs scheduled tickets. Press Auto-schedule in the Intake tab.', 'muted'));
+      card.append(el('p', 'Needs scheduled tickets. Press Auto-schedule in Project setup.', 'muted'));
       return card;
     }
     const width = 520;

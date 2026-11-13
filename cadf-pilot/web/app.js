@@ -132,7 +132,7 @@ const API = {
 // ─────────────────────────────────────────────────────────────────────────────
 const Router = (() => {
   let activeView=null;
-  const VIEWS = ['conversation','management','projects','orchestration','marketing','tasks','overview','agents','reviews','activity','documents','storage'];
+  const VIEWS = ['conversation','management','project-setup','projects','orchestration','marketing','tasks','overview','agents','reviews','activity','documents','storage'];
 
   function activate(hash) {
     const id = (hash || location.hash).replace('#', '') || 'conversation';
@@ -1413,7 +1413,7 @@ const VisualWorkspace=(()=>{
   if (typeof WorkUI === 'undefined') {
     board.textContent = 'The Work view script (work.js) did not load. Reload the page.';
   } else {
-    WorkUI.update(board, data, DOM.get('pm-project').value);
+    WorkUI.update(board, data, DOM.get('pm-project').value, DOM.get('project-setup-board'));
   }
 
  }
