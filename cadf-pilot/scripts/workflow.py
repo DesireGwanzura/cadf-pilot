@@ -108,8 +108,8 @@ def schema(mode):
         'At most 6 tasks; dependencies refer only to earlier task ids. Every draft needs a later "review" task that depends on it and uses a DIFFERENT model. '
         'Available models: '+', '.join(MODELS)+'. Choose models to suit each task (strong reasoning for planning/review, fast models for simple drafts). '
         'Agents work as plain text only: no tools, file edits, web access, publishing or spending. '
-        +('Tasks that need a person (calls, approvals, physical or account actions) are owner "human", kind "action", with an assignee from the team list; agents prepare material for them. ' if humans else '')+
-        'If requested implementation/release needs unsupported capabilities, put that in blockers; do not claim the tasks deliver the whole objective. Estimate working days honestly; no invented dates or completed work.')
+        +('Tasks that need a person (calls, approvals, physical or account actions) are owner "human", kind "action", with an assignee from the team list; agents prepare material for them. Information only a team member can supply (facts, approvals, decisions) is NOT a blocker: make it a human action task that the dependent agent tasks wait for. ' if humans else '')+
+        'Use blockers only for capabilities nobody on the team can supply, such as live web access, code execution or publishing; if the work can proceed, leave blockers empty. If requested implementation/release needs unsupported capabilities, put that in blockers; do not claim the tasks deliver the whole objective. Estimate working days honestly; no invented dates or completed work.')
 
 def request_plan(project,store,now):
     mode=project.get('mode','ai')
