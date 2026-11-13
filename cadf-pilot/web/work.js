@@ -563,7 +563,7 @@ const WorkUI = (() => {
     if (!work.items.length) {
       box.append(el('p', project.mode === 'ai'
         ? 'Tickets appear here once the approved plan starts, and from documents the agents deliver.'
-        : 'No tickets yet. Add one below or paste a list in the Intake tab.', 'muted'));
+        : 'No tickets yet. Add one below or paste a list in Project setup.', 'muted'));
     } else {
       const wrap = el('div', undefined, 'wk-table-wrap');
       const table = el('table', undefined, 'wk-table');
@@ -967,14 +967,14 @@ const WorkUI = (() => {
       return card;
     }
     for (const entry of bars) {
-      const row = el('div', undefined, 'wk-bar-row');
+      const row = el('div', undefined, 'wk-bar-row wk-bar-stacked');
       const track = el('div', undefined, 'wk-track');
       const open = el('span', undefined, 'wk-fill wk-fill-doing');
       open.style.width = entry.openShare + '%';
       const done = el('span', undefined, 'wk-fill wk-fill-done');
       done.style.width = entry.doneShare + '%';
       track.append(open, done);
-      row.append(el('span', entry.owner + (entry.kind === 'agent' ? ' 🤖' : '')), track, el('b', entry.open + ' open / ' + entry.done + ' done · ' + entry.items + ' tickets'));
+      row.append(el('span', entry.owner + (entry.kind === 'agent' ? ' 🤖' : '')), track, el('small', entry.open + 'd open · ' + entry.done + 'd done · ' + entry.items + ' tickets', 'wk-bar-note'));
       card.append(row);
     }
     return card;
@@ -983,7 +983,7 @@ const WorkUI = (() => {
   function burndownChart(work) {
     const card = chartCard('Burndown', 'Remaining working days: ideal vs actual');
     if (!work.burndown.length) {
-      card.append(el('p', 'Needs scheduled tickets. Press Auto-schedule in the Intake tab.', 'muted'));
+      card.append(el('p', 'Needs scheduled tickets. Press Auto-schedule in Project setup.', 'muted'));
       return card;
     }
     const width = 520;
