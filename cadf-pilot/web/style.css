@@ -1390,3 +1390,10 @@ body{background:#edebf3}body>aside{border-right:1px solid #e4dfed;padding:26px 1
 .mode-option{display:grid;grid-template-columns:auto auto 1fr;gap:8px;align-items:center;font-size:13px}
 .mode-option small{color:var(--text-muted)}
 .agent-family{margin-bottom:16px}.agent-family h3{margin:6px 0}
+.wk-toolbar{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px;border-bottom:1px solid var(--border-light)}
+.wk-toolbar .wk-tabs{border-bottom:0}
+.wk-toolbar .wk-downloads{flex-wrap:nowrap;gap:6px;margin-bottom:4px}
+.wk-toolbar .wk-downloads select{width:auto;max-width:170px;padding:4px 8px;font-size:12px}
+.wk-toolbar .wk-downloads a{white-space:nowrap}
+.wk-stats>div{display:flex;flex-direction:column;padding:6px 12px;border-radius:12px;border:1px solid var(--border-light)}
+.wk-stats>div span{font-size:11px;opacity:.7}
