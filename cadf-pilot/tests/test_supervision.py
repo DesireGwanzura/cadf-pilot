@@ -11,12 +11,13 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import serve
 import workflow
+import providers
 import exports
 from orchestrator import Worker
 
 PLAN={'summary':'Prepare an evidence-labelled opportunity pack.','category':'opportunities','tasks':[
- {'id':'T1','title':'Prepare a positioning draft','owner':'codex','model':None,'kind':'draft','instructions':'Draft positioning from the brief.','deliverable':'Positioning note','acceptance':'Every claim distinguished from assumptions.','depends_on':[]},
- {'id':'T2','title':'Review the positioning','owner':'antigravity','model':'claude-sonnet-4-6','kind':'review','instructions':'Review the draft for unsupported claims.','deliverable':'Review note','acceptance':'Identify evidence gaps.','depends_on':['T1']}], 'blockers':[]}
+ {'id':'T1','title':'Prepare a positioning draft','owner':'copilot','model':'claude-opus-5.5','kind':'draft','instructions':'Draft positioning from the brief.','deliverable':'Positioning note','acceptance':'Every claim distinguished from assumptions.','depends_on':[]},
+ {'id':'T2','title':'Review the positioning','owner':'copilot','model':'gpt-6.1-sol','kind':'review','instructions':'Review the draft for unsupported claims.','deliverable':'Review note','acceptance':'Identify evidence gaps.','depends_on':['T1']}], 'blockers':[]}
 
 class SupervisionTests(unittest.TestCase):
     def setUp(self):
@@ -40,7 +41,7 @@ class SupervisionTests(unittest.TestCase):
         plan=self.proposed();self.assertEqual(plan['status'],'PROPOSED')
         self.assertEqual(self.p()['management']['items'],[])
         with self.assertRaises(serve.Conflict):self.act('start')
-        with self.assertRaises(serve.Conflict):self.act('request_job',worker='codex',kind='plan')
+        with self.assertRaises(serve.Conflict):self.act('request_job',worker='copilot',kind='plan')
     def test_legacy_controls_cannot_bypass_supervised_scope(self):
         plan=self.proposed()
         for action in ['pm_item','pm_accept','pm_collect','pm_version','pm_closeout','complete']:
@@ -58,16 +59,12 @@ class SupervisionTests(unittest.TestCase):
         self.assertEqual(current['status'],'OPEN')
         with self.assertRaises(serve.Conflict):self.act('pm_schedule',item_id=item['id'],owner='Other')
         with self.assertRaises(serve.Conflict):self.act('pm_schedule',item_id=item['id'],work_status='DOING')
-    def test_grok_import_stays_in_private_room(self):
-        self.act('grok_reply',content='Private manual handoff')
-        self.assertEqual(self.store()['messages'][-1]['room'],'grok')
-        self.assertNotIn('Private manual handoff',workflow.base_context(self.p(),self.store(),'team'))
-        self.assertIn('Private manual handoff',workflow.base_context(self.p(),self.store(),'grok'))
     def test_exact_plan_approval_and_ordered_artifacts(self):
+        self.act('set_options',autopilot=False)
         plan=self.approved();job=self.worker.claim();self.assertEqual(job['task_id'],'T1')
         self.result(job,{'summary':'Draft ready','artifact':'Evidence-labelled positioning.','issues':[]})
-        second=self.worker.claim();self.assertIn('Evidence-labelled positioning.',second['prompt']);self.assertEqual(second['model'],'claude-sonnet-4-6')
-        self.result(second,{'summary':'Review ready','artifact':'No live vacancies were checked.','issues':[]})
+        second=self.worker.claim();self.assertIn('Evidence-labelled positioning.',second['prompt']);self.assertEqual(second['model'],'gpt-6.1-sol')
+        self.result(second,{'summary':'Review ready','artifact':'No live vacancies were checked.','verdict':'approve','issues':[]})
         self.assertIsNone(self.worker.claim());self.assertEqual(self.p()['coordination']['state'],'AWAITING_ACCEPTANCE')
         self.act('accept_delivery',plan_id=plan['id']);self.act('close_project');self.assertEqual(self.p()['status'],'COMPLETED')
         with self.assertRaises(ValueError):self.act('prepare_plan')
@@ -103,27 +100,27 @@ class SupervisionTests(unittest.TestCase):
         self.result(self.worker.claim(),'not JSON');self.assertEqual(self.p()['coordination']['state'],'BLOCKED');self.assertIsNone(self.worker.claim())
     def test_blocker_routes_to_specific_agent_and_reply_stays_there(self):
         self.approved();job=self.worker.claim();self.result(job,{'summary':'Need a decision','artifact':'','issues':[{'kind':'blocker','scope':'individual','text':'Which audience?'}]})
-        message=self.store()['messages'][-1];self.assertEqual(message['room'],'codex')
+        message=self.store()['messages'][-1];self.assertEqual(message['room'],'cp-claude-opus-5.5')
         before=self.store()
         with self.assertRaises(ValueError):self.act('message',recipient='team',record_kind='decision',reply_to=message['id'],content='Private answer')
-        self.assertEqual(before,self.store());self.act('message',recipient='codex',record_kind='decision',reply_to=message['id'],content='Private audience')
+        self.assertEqual(before,self.store());self.act('message',recipient='cp-claude-opus-5.5',record_kind='decision',reply_to=message['id'],content='Private audience')
         self.assertEqual(self.p()['issues'][-1]['status'],'ANSWERED')
         self.assertNotIn('Private audience',workflow.base_context(self.p(),self.store()))
-        self.assertIn('Private audience',workflow.base_context(self.p(),self.store(),'codex'))
+        self.assertIn('Private audience',workflow.base_context(self.p(),self.store(),'cp-claude-opus-5.5'))
     def test_no_cross_room_history_or_records_in_prompts(self):
         self.act('cancel_job',job_id=self.store()['jobs'][0]['id'])
-        self.act('message',recipient='codex',record_kind='decision',content='CODEX_SECRET')
-        self.act('message',recipient='ag-sonnet',record_kind='decision',content='SONNET_SECRET')
-        self.act('message',recipient='ag-opus',content='Private question')
-        job=self.store()['jobs'][-1];self.assertEqual(job['model'],'claude-opus-4-6-thinking')
+        self.act('message',recipient='cp-claude-opus-5.5',record_kind='decision',content='CODEX_SECRET')
+        self.act('message',recipient='cp-claude-sonnet-5.5',record_kind='decision',content='SONNET_SECRET')
+        self.act('message',recipient='cp-claude-opus-5',content='Private question')
+        job=self.store()['jobs'][-1];self.assertEqual(job['model'],'claude-opus-5')
         self.assertNotIn('CODEX_SECRET',job['prompt']);self.assertNotIn('SONNET_SECRET',job['prompt'])
         self.act('cancel_job',job_id=job['id']);self.act('message',recipient='team',broadcast=True,content='Team question')
-        group=self.store()['jobs'][-7:];self.assertEqual(len(group),7);self.assertEqual(len({j['model'] for j in group}),7)
+        group=self.store()['jobs'][-6:];self.assertEqual(len(group),6);self.assertEqual({j['model'] for j in group},set(providers.TEAM_PANEL))
         for j in group:self.assertEqual(j['chat_room'],'team');self.assertNotIn('SECRET',j['prompt']);self.assertNotIn('Private question',j['prompt'])
     def test_private_record_versions_do_not_merge_between_profiles(self):
-        self.act('message',recipient='ag-sonnet',record_kind='decision',content='SONNET_ONLY')
-        self.act('message',recipient='ag-opus',record_kind='decision',content='OPUS_ONLY')
-        versions=self.p()['management']['versions'];self.assertNotIn('SONNET_ONLY',versions[-1]['content']);self.assertEqual(versions[-1]['room'],'ag-opus')
+        self.act('message',recipient='cp-claude-sonnet-5.5',record_kind='decision',content='SONNET_ONLY')
+        self.act('message',recipient='cp-claude-opus-5',record_kind='decision',content='OPUS_ONLY')
+        versions=self.p()['management']['versions'];self.assertNotIn('SONNET_ONLY',versions[-1]['content']);self.assertEqual(versions[-1]['room'],'cp-claude-opus-5')
     def test_dates_and_priority_validate_atomically(self):
         self.act('project_schedule',start_date='2026-10-17',end_date='2026-10-25',priority='HIGH');before=self.store()
         with self.assertRaises(ValueError):self.act('project_schedule',end_date='2026-10-01')
@@ -139,8 +136,34 @@ class SupervisionTests(unittest.TestCase):
         draft=self.store()['campaigns'][0];self.assertEqual(draft['status'],'DRAFT');self.assertTrue(draft['source_job_id'])
         with self.assertRaises(ValueError):self.act('approve_campaign',campaign_id=draft['id'],rights_confirmed=True)
     def test_self_review_is_rejected(self):
-        plan=copy.deepcopy(PLAN);plan['tasks'][1].update(owner='codex',model=None)
+        plan=copy.deepcopy(PLAN);plan['tasks'][1].update(model='claude-opus-5.5')
         with self.assertRaises(ValueError):workflow.validate_plan(plan)
+
+    def test_autopilot_closes_after_independent_approval(self):
+        self.approved();self.result(self.worker.claim(),{'summary':'Draft ready','artifact':'Draft','issues':[]})
+        self.result(self.worker.claim(),{'summary':'Approved','artifact':'Looks right','verdict':'approve','issues':[]})
+        self.assertEqual(self.p()['status'],'COMPLETED');self.assertEqual(self.p()['coordination']['plans'][-1]['status'],'ACCEPTED')
+    def test_review_without_verdict_is_rejected(self):
+        self.approved();self.result(self.worker.claim(),{'summary':'Draft ready','artifact':'Draft','issues':[]})
+        self.result(self.worker.claim(),{'summary':'Reviewed','artifact':'Fine','issues':[]})
+        self.assertEqual(self.p()['coordination']['state'],'BLOCKED')
+    def test_requested_changes_trigger_automatic_revision_then_escalate(self):
+        self.approved();self.result(self.worker.claim(),{'summary':'Draft ready','artifact':'Draft v1','issues':[]})
+        for cycle in (1,2):
+            self.result(self.worker.claim(),{'summary':'Weak','artifact':'Add evidence','verdict':'changes_requested','issues':[]})
+            revision=self.worker.claim();self.assertEqual(revision['task_id'],'T1');self.assertIn('Add evidence',revision['prompt'])
+            self.result(revision,{'summary':'Revised','artifact':'Draft v'+str(cycle+1),'issues':[]})
+        self.result(self.worker.claim(),{'summary':'Still weak','artifact':'Still thin','verdict':'changes_requested','issues':[]})
+        self.assertEqual(self.p()['coordination']['state'],'BLOCKED');self.assertEqual(self.p()['issues'][-1]['status'],'OPEN')
+    def test_hybrid_plan_allows_human_tasks_but_ai_plan_does_not(self):
+        plan=copy.deepcopy(PLAN);plan['tasks'].append({'id':'T3','title':'Call the client','owner':'human','assignee':'Dana','kind':'action','instructions':'Phone the client.','deliverable':'Call notes','acceptance':'Notes saved.','depends_on':['T2'],'estimate_days':2})
+        with self.assertRaises(ValueError):workflow.validate_plan(plan,'ai')
+        checked=workflow.validate_plan(plan,'hybrid');self.assertEqual(checked['tasks'][2]['assignee'],'Dana')
+    def test_estimate_and_model_are_validated(self):
+        bad=copy.deepcopy(PLAN);bad['tasks'][0]['estimate_days']=99
+        with self.assertRaises(ValueError):workflow.validate_plan(bad)
+        bad=copy.deepcopy(PLAN);bad['tasks'][0]['model']='not-a-model'
+        with self.assertRaises(ValueError):workflow.validate_plan(bad)
 
     def test_downloads_escape_content_and_keep_source(self):
         self.act('message',recipient='team',record_kind='decision',content='<script>alert(1)</script> & test')

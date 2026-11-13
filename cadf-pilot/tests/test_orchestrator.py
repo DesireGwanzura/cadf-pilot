@@ -6,7 +6,11 @@ import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import serve
-from orchestrator import Worker
+import providers
+from orchestrator import Worker, worker_command
+
+def printing(text):
+    return lambda *a,**k:([sys.executable,'-c','print('+repr(text)+')'],{})
 
 class OrchestrationTests(unittest.TestCase):
     def setUp(self):
@@ -36,14 +40,11 @@ class OrchestrationTests(unittest.TestCase):
         self.act(action='resume')
         self.assertEqual(self.store()['jobs'][0]['status'],'CANCELLED')
         self.assertEqual(self.store()['jobs'][1]['status'],'REQUESTED')
-    def test_success_records_real_process_result(self):
+    def test_success_records_stdout_as_result(self):
         job=self.store()['jobs'][0];self.act(action='approve_job',job_id=job['id']);job=self.worker.claim()
-        def command(worker,directory,prompt):
-            code="from pathlib import Path;Path('result.txt').write_text('test-process-output')"
-            return [sys.executable,'-c',code],{}
-        with patch('orchestrator.worker_command',side_effect=command):self.worker.execute(job)
+        with patch('orchestrator.worker_command',side_effect=printing('test-process-output')):self.worker.execute(job)
         self.assertEqual(self.store()['jobs'][0]['status'],'SUCCEEDED')
-        self.assertEqual((self.root/'.cadf-runtime/runs'/job['id']/'result.txt').read_text(),'test-process-output')
+        self.assertIn('test-process-output',(self.root/'.cadf-runtime/runs'/job['id']/'result.txt').read_text())
     def test_auth_failure_stops_without_retry(self):
         job=self.store()['jobs'][0];self.act(action='approve_job',job_id=job['id']);job=self.worker.claim()
         with patch('orchestrator.worker_command',side_effect=ValueError('account blocked')):self.worker.execute(job)
@@ -63,67 +64,35 @@ class OrchestrationTests(unittest.TestCase):
         self.act(action='save_campaign',title='Campaign',audience='Readers',content='Draft',channel='Facebook')
         with self.assertRaises(ValueError):self.act(action='approve_campaign',campaign_id=self.store()['campaigns'][0]['id'],rights_confirmed=True)
     def test_no_double_pending_job(self):
-        with self.assertRaises(serve.Conflict):self.act(action='request_job',worker='codex',kind='marketing')
+        with self.assertRaises(serve.Conflict):self.act(action='request_job',worker='copilot',kind='marketing')
     def test_running_cancel_request(self):
         job=self.store()['jobs'][0];self.act(action='approve_job',job_id=job['id']);job=self.worker.claim()
         self.act(action='pause');self.assertEqual(self.store()['jobs'][0]['status'],'CANCEL_REQUESTED')
         self.worker.finish(job,'SUCCEEDED')
         self.assertEqual(self.store()['jobs'][0]['status'],'PAUSED')
-    def test_antigravity_command_and_env(self):
-        import orchestrator
-        multiline_prompt = "Line 1\nLine 2 with 'quotes' and $special\nLine 3"
-        with patch.dict('os.environ', {'GOOGLE_API_KEY': 'secret', 'GEMINI_API_KEY': 'secret2', 'OPENAI_API_KEY': 'secret3'}), patch('pathlib.Path.exists',return_value=True), patch('pathlib.Path.read_text',return_value='{"useG1Credits":false}'):
-            cmd, env = orchestrator.worker_command('antigravity', Path('.'), multiline_prompt)
-        self.assertEqual(cmd[1:6], ['--mode', 'plan', '--sandbox', '--print-timeout', '180s'])
-        self.assertEqual(cmd[6], '--print')
-        self.assertEqual(cmd[7], multiline_prompt)
-        for key in ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'OPENAI_API_KEY']:
-            self.assertNotIn(key, env)
-    def test_antigravity_credits_guard(self):
-        import orchestrator
-        with patch('pathlib.Path.read_text', return_value=json.dumps({'useG1Credits': True})), patch('pathlib.Path.exists', return_value=True):
-            with self.assertRaises(ValueError):
-                orchestrator.worker_command('antigravity', Path('.'), 'prompt')
-    def test_antigravity_restores_omitted_false_without_losing_preferences(self):
-        from orchestrator import ensure_antigravity_budget
-        settings = self.root / 'settings.json'
-        settings.write_text(json.dumps({'theme': 'light', 'custom': {'value': 7}}))
-        ensure_antigravity_budget(settings)
-        self.assertEqual(json.loads(settings.read_text()),
-                         {'theme': 'light', 'custom': {'value': 7}, 'useG1Credits': False})
-        self.assertEqual(list(self.root.glob('.cadf-credits-*')), [])
-    def test_antigravity_rejects_unsafe_or_invalid_settings_without_rewriting(self):
-        from orchestrator import ensure_antigravity_budget
-        settings = self.root / 'settings.json'
-        for content in ['{"useG1Credits":true}', '{"useG1Credits":null}',
-                        '{"useG1Credits":0}', '{"useG1Credits":"false"}', '[]', '{broken']:
-            settings.write_text(content)
-            with self.assertRaises(ValueError): ensure_antigravity_budget(settings)
-            self.assertEqual(settings.read_text(), content)
-    def test_antigravity_rejects_missing_and_symlink_settings(self):
-        from orchestrator import ensure_antigravity_budget
-        settings = self.root / 'settings.json'
-        with self.assertRaises(ValueError): ensure_antigravity_budget(settings)
-        target = self.root / 'target.json'; target.write_text('{}')
-        settings.symlink_to(target)
-        with self.assertRaises(ValueError): ensure_antigravity_budget(settings)
-        self.assertEqual(target.read_text(), '{}')
-    def test_antigravity_execution_result(self):
-        job0 = self.store()['jobs'][0]
-        self.act(action='cancel_job', job_id=job0['id'])
-        self.act(action='request_job', worker='antigravity', kind='review')
-        job1 = next(j for j in self.store()['jobs'] if j['worker'] == 'antigravity')
-        self.act(action='approve_job', job_id=job1['id'])
-        claimed = self.worker.claim()
-        self.assertEqual(claimed['worker'], 'antigravity')
-        def fake_cmd(worker, directory, prompt):
-            code = "print('Antigravity review output')"
-            return [sys.executable, '-c', code], {}
-        with patch('orchestrator.worker_command', side_effect=fake_cmd):
-            self.worker.execute(claimed)
-        saved = next(j for j in self.store()['jobs'] if j['id'] == job1['id'])
-        self.assertEqual(saved['status'], 'SUCCEEDED')
-        result_file = self.root / '.cadf-runtime/runs' / job1['id'] / 'result.txt'
-        self.assertIn('Antigravity review output', result_file.read_text())
+    def test_copilot_command_is_locked_down_and_env_is_clean(self):
+        prompt="Line 1\nLine 2 with 'quotes' and $special"
+        with patch.dict('os.environ',{'GOOGLE_API_KEY':'a','GEMINI_API_KEY':'b','OPENAI_API_KEY':'c','ANTHROPIC_API_KEY':'d'}),patch('providers.installed',return_value=True):
+            cmd,env=worker_command('copilot',Path('.'),prompt,'gpt-6.1-sol')
+        self.assertEqual(cmd[cmd.index('--model')+1],'gpt-6.1-sol')
+        self.assertIn(prompt,cmd);self.assertIn('--no-ask-user',cmd)
+        self.assertTrue(any(a.startswith('--excluded-tools=') and 'bash' in a for a in cmd))
+        self.assertTrue(any(a.startswith('--deny-tool') for a in cmd))
+        for key in ['GOOGLE_API_KEY','GEMINI_API_KEY','OPENAI_API_KEY','ANTHROPIC_API_KEY']:self.assertNotIn(key,env)
+    def test_only_copilot_and_catalogued_models_are_accepted(self):
+        with self.assertRaises(ValueError):worker_command('codex',Path('.'),'x',None)
+        with self.assertRaises(ValueError):worker_command('copilot',Path('.'),'x','arbitrary-model')
+        self.assertEqual(len(providers.MODELS),len(set(providers.MODELS)))
+    def test_oversized_prompt_is_rejected(self):
+        with patch('providers.installed',return_value=True),self.assertRaises(ValueError):
+            worker_command('copilot',Path('.'),'x'*(providers.MAX_PROMPT_BYTES+1),None)
+    def test_execution_result_for_copilot_job(self):
+        self.act(action='cancel_job',job_id=self.store()['jobs'][0]['id'])
+        self.act(action='request_job',worker='copilot',model='claude-sonnet-5.5',kind='review')
+        job=next(j for j in self.store()['jobs'] if j['status']=='REQUESTED')
+        self.act(action='approve_job',job_id=job['id']);claimed=self.worker.claim()
+        self.assertEqual((claimed['worker'],claimed['model']),('copilot','claude-sonnet-5.5'))
+        with patch('orchestrator.worker_command',side_effect=printing('Copilot review output')):self.worker.execute(claimed)
+        self.assertEqual(next(j for j in self.store()['jobs'] if j['id']==job['id'])['status'],'SUCCEEDED')
 
 if __name__=='__main__':unittest.main()

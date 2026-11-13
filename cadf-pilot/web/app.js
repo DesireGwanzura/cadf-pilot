@@ -180,13 +180,44 @@ const ChatComponent = (() => {
 
   function _updateSendButton() {
     const v = DOM.get('chat-recipient').value;
-    DOM.get('chat-model').closest('label').hidden=true;
-    DOM.get('grok-handoff').open=v==='grok';
+    const data = Store.get();
     DOM.get('chat-send').textContent = '↑';
-    DOM.get('chat-send').setAttribute('aria-label', v==='team'?'Send to everyone':'Send message');
-    DOM.get('chat-send-note').textContent = v==='grok'?'Saves a note for manual transfer. Download the brief below; no Grok request is sent.': v === 'team'
-      ? 'Broadcasts to Codex + 6 Antigravity profiles (7 replies). Uses account quota; Grok stays manual. Enter sends · Shift+Enter adds a line.'
-      : 'Authorizes one bounded reply using existing account quota. No paid fallback, code changes, or publishing.';
+    DOM.get('chat-send').setAttribute('aria-label', v === 'team' ? 'Send to the team panel' : 'Send message');
+    const panel = (data?.team_panel || []).length;
+    DOM.get('chat-send-note').textContent = v === 'legacy'
+      ? 'Retired provider (history) is read-only. Pick a Copilot model or the Team room to continue.'
+      : v === 'team'
+        ? 'Sends to the team panel (' + panel + ' Copilot models answer). Uses your Copilot allowance. Enter sends · Shift+Enter adds a line.'
+        : 'Requests one bounded text reply from this Copilot model. No paid fallback, code changes, or publishing.';
+  }
+
+  function _recipientLabel(room, data) {
+    if (room === 'team') return 'Team · group send to the panel models';
+    if (room === 'legacy') return 'Retired provider (history)';
+    return (data.agent_profiles || []).find(p => p.room === room)?.name || room;
+  }
+
+  /** Rebuild the recipient list (Team, Copilot models grouped by family, legacy history) only when it changes. */
+  function _fillRecipients(data, hasLegacy) {
+    const select = DOM.get('chat-recipient');
+    const signature = JSON.stringify([(data.agent_profiles || []).map(p => p.room), hasLegacy]);
+    if (select.dataset.signature === signature) return;
+    const previous = select.value;
+    select.replaceChildren(new Option(_recipientLabel('team', data), 'team'));
+    const groups = new Map();
+    for (const profile of data.agent_profiles || []) {
+      if (!groups.has(profile.family)) groups.set(profile.family, []);
+      groups.get(profile.family).push(profile);
+    }
+    for (const [family, profiles] of groups) {
+      const group = document.createElement('optgroup');
+      group.label = family;
+      for (const profile of profiles) group.append(new Option(profile.name + ' · ' + profile.model, profile.room));
+      select.append(group);
+    }
+    if (hasLegacy) select.append(new Option(_recipientLabel('legacy', data), 'legacy'));
+    select.dataset.signature = signature;
+    select.value = [...select.options].some(o => o.value === previous) ? previous : 'team';
   }
 
   function _renderMessages(messages, jobs, project) {
@@ -220,7 +251,7 @@ const ChatComponent = (() => {
     for (const job of attention) {
       const item = DOM.el('div', undefined, 'attention-item');
       item.append(
-        DOM.el('b', job.worker === 'codex' ? 'Codex' : 'Antigravity'),
+        DOM.el('b', job.participant || job.model || 'Copilot'),
         DOM.el('p', job.status === 'REQUESTED' ? 'A job is waiting for your approval.' :
                      job.status === 'CANCEL_REQUESTED' ? 'Waiting for worker process to stop.' :
                      job.error || 'Job requires inspection.')
@@ -245,16 +276,14 @@ const ChatComponent = (() => {
   }
 
   function update(data) {
-    for(const profile of data.agent_profiles||[]){if(![...DOM.get('chat-recipient').options].some(o=>o.value===profile.room))DOM.get('chat-recipient').append(new Option(profile.name+' · Antigravity',profile.room));}
     DOM.fillSelect('chat-project', data.projects.projects);
+    _fillRecipients(data, (data.projects.messages || []).some(m => m.room === 'legacy'));
     const selected = DOM.get('chat-project').value;
     const draftKey=selected+':'+DOM.get('chat-recipient').value;
     if(draftKey!==_selectedProject){if(_selectedProject)_drafts[_selectedProject]=DOM.get('chat-input').value;DOM.get('chat-input').value=_drafts[draftKey]||'';_selectedProject=draftKey;}
     const project = data.projects.projects.find(p => p.id === selected);
     const recipient=DOM.get('chat-recipient').value;
     const allMessages=(data.projects.messages||[]).filter(m=>m.project_id===selected);
-    const selectedJobs=(data.projects.jobs||[]).filter(j=>j.project_id===selected&&j.worker===recipient);
-    const names={codex:'Codex',antigravity:'Antigravity',grok:'Grok'};
     const messages=allMessages.filter(m=>(m.room||'team')===recipient);
     const jobs = (data.projects.jobs || []).filter(j => j.project_id === selected);
 
@@ -264,15 +293,14 @@ const ChatComponent = (() => {
 
     _renderMessages(messages, jobs, project);
     _renderBlockers(jobs, project);
-    DOM.get('chat-send').disabled = _sending || !project || ['ARCHIVED','COMPLETED'].includes(project.status);
+    DOM.get('chat-send').disabled = _sending || !project || recipient === 'legacy' || ['ARCHIVED','COMPLETED'].includes(project.status);
     VisualWorkspace.rooms(data);
     _updateSendButton();
     SupervisionUI.resizeComposer();
   }
 
   function mount() {
-    DOM.get('chat-model').disabled=DOM.get('chat-recipient').value!=='antigravity';
-    DOM.get('chat-recipient').addEventListener('change',()=>{DOM.get('chat-model').disabled=DOM.get('chat-recipient').value!=='antigravity';_updateSendButton();if(Store.get())update(Store.get());});
+    DOM.get('chat-recipient').addEventListener('change',()=>{_updateSendButton();if(Store.get())update(Store.get());});
 
     DOM.get('chat-project').addEventListener('change', () => {
       const data = Store.get();
@@ -300,7 +328,7 @@ const ChatComponent = (() => {
     DOM.get('chat-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const data = Store.get();
-      if (_sending || !data || !DOM.get('chat-project').value) return;
+      if (_sending || !data || !DOM.get('chat-project').value || DOM.get('chat-recipient').value === 'legacy') return;
       _sending = true;
       DOM.get('chat-send').disabled = true;
       DOM.get('chat-feedback').textContent = 'Sending message…';
@@ -312,7 +340,6 @@ const ChatComponent = (() => {
         ...SupervisionUI.payload(),
         id: pid,
         recipient: DOM.get('chat-recipient').value,
-        model: DOM.get('chat-recipient').value==='antigravity'?DOM.get('chat-model').value:null,
         content: DOM.get('chat-input').value,
         expected_revision: data.projects.revision
       };
@@ -343,6 +370,27 @@ const ProjectsComponent = (() => {
   let _editing = null;
   let _editRevision = null;
   let _busy = false;
+  let _team = null;
+
+  function _mode() {
+    return document.querySelector('input[name="project-mode"]:checked')?.value || 'ai';
+  }
+
+  /** Show only the controls that make sense for the chosen mode (human projects get no automation controls). */
+  function _syncMode() {
+    const mode = _mode();
+    document.querySelectorAll('#project-form [data-modes]').forEach(node => {
+      node.hidden = !node.dataset.modes.split(' ').includes(mode);
+    });
+  }
+
+  /** Hybrid creation has no ticket intake on the server, so pasted requirements travel inside the brief. */
+  function _brief(mode) {
+    const brief = DOM.get('project-brief').value;
+    const tasks = DOM.get('project-tasks').value.trim();
+    if (mode !== 'hybrid' || !tasks) return brief;
+    return (brief + '\n\nTasks / requirements supplied by the owner:\n' + tasks).slice(0, 10000);
+  }
 
   function _message(msg, error = false) {
     const el = DOM.get('project-message');
@@ -354,6 +402,8 @@ const ProjectsComponent = (() => {
     _editing = null;
     _editRevision = null;
     DOM.get('project-form').reset();
+    _team.set([]);
+    _syncMode();
     DOM.get('project-form-title').textContent = 'Submit a New Project';
     DOM.get('project-save').textContent = 'Submit Project';
     DOM.get('project-cancel').hidden = true;
@@ -392,7 +442,9 @@ const ProjectsComponent = (() => {
       const card = DOM.el('article', undefined, 'project-card');
 
       const headerRow = DOM.el('div', undefined, 'project-card-header');
-      headerRow.append(Fmt.badge(project.status), DOM.el('small', 'Priority: ' + project.priority));
+      const mode = project.mode || 'ai';
+      card.dataset.workflow = project.workflow || '';
+      headerRow.append(Fmt.badge(project.status), DOM.el('span', mode.toUpperCase(), 'tag wk-mode wk-mode-' + mode), DOM.el('small', 'Priority: ' + project.priority));
       card.append(headerRow);
       card.append(DOM.el('h3', project.name));
 
@@ -415,7 +467,7 @@ const ProjectsComponent = (() => {
       });
       actions.append(openChat);
 
-      const openPM = DOM.el('button', '📋 PM');
+      const openPM = DOM.el('button', '📋 Work');
       openPM.addEventListener('click', () => {
         WorkspaceUI.openProject(project.id);
       });
@@ -463,19 +515,36 @@ const ProjectsComponent = (() => {
       e.preventDefault();
       const data = Store.get();
       if (!data) { _message('Wait for records to load.', true); return; }
-      _save({
+      const mode = _mode();
+      const payload = {
         action: _editing ? 'update' : 'create',
         id: _editing,
         expected_revision: _editing ? _editRevision : data.projects.revision,
         name: DOM.get('project-name').value,
-        brief: DOM.get('project-brief').value,
-        deliverables:DOM.get('project-deliverables').value,
-        workflow:'supervised',
+        brief: _brief(mode),
+        deliverables: DOM.get('project-deliverables').value,
         repository: DOM.get('project-repository').value,
         priority: DOM.get('project-priority').value
-      }, true);
+      };
+      if (!_editing) {
+        payload.mode = mode;
+        if (mode !== 'human') payload.workflow = 'supervised';
+        if (mode !== 'human') {
+          payload.autopilot = DOM.get('project-autopilot').checked;
+          payload.auto_approve = DOM.get('project-auto-approve').checked;
+        }
+        if (mode !== 'ai') payload.team = _team.get();
+        if (mode === 'human') payload.tasks_text = DOM.get('project-tasks').value;
+        if (DOM.get('project-start').value) payload.start_date = DOM.get('project-start').value;
+        if (DOM.get('project-end').value) payload.end_date = DOM.get('project-end').value;
+      }
+      _save(payload, true);
     });
 
+    _team = WorkUI.teamEditor([]);
+    DOM.get('project-team-editor').append(_team.element);
+    document.querySelectorAll('input[name="project-mode"]').forEach(radio => radio.addEventListener('change', _syncMode));
+    _syncMode();
     DOM.get('project-cancel').addEventListener('click', () => { _resetForm(); _message('Edit cancelled.'); });
     DOM.get('project-filter').addEventListener('change', () => { const d = Store.get(); if (d) update(d); });
   }
@@ -541,7 +610,7 @@ const ManagementComponent = (() => {
         DOM.get('chat-project').value = project.id;
         ChatComponent.update(Store.get());
         DOM.get('chat-input').value = 'Regarding ' + project.name + ': ';
-        DOM.get('chat-recipient').value = 'codex';
+        DOM.get('chat-recipient').value = 'team';
         Router.activate('#conversation');
         DOM.get('chat-input').focus();
       });
@@ -804,7 +873,7 @@ const OrchestrationComponent = (() => {
       card.append(
         Fmt.badge(job.status),
         DOM.el('h3', (project?.name || job.project_id) + ' · ' + job.kind),
-        DOM.el('p', 'Worker: ' + job.worker + ' · ' + (job.model||'account default') + (job.team_models?' · Team stage '+(job.team_stage+1)+'/3':'') + ' · ' + job.id + ' (Attempts: ' + job.attempts + ')')
+        DOM.el('p', 'GitHub Copilot · ' + (job.model || 'automatic model') + ' · ' + job.id + ' (Attempts: ' + job.attempts + ')')
       );
 
       const detail = DOM.el('details');
@@ -838,11 +907,6 @@ const OrchestrationComponent = (() => {
   }
 
   function mount() {
-    DOM.get('job-model').disabled=DOM.get('job-worker').value!=='antigravity';
-    DOM.get('job-worker').addEventListener('change',()=>{DOM.get('job-model').disabled=DOM.get('job-worker').value!=='antigravity';});
-    DOM.get('team-reviewer').value='claude-sonnet-4-6';
-    DOM.get('team-synthesizer').value='gpt-oss-120b-medium';
-    DOM.get('team-request').addEventListener('click',()=>{const data=Store.get();if(!data||!DOM.get('job-project').value)return;AppController.saveProject({action:'team_job',id:DOM.get('job-project').value,models:['team-planner','team-reviewer','team-synthesizer'].map(id=>DOM.get(id).value),expected_revision:data.projects.revision});});
     DOM.get('job-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const data = Store.get();
@@ -850,8 +914,7 @@ const OrchestrationComponent = (() => {
       AppController.saveProject({
         action: 'request_job',
         id: DOM.get('job-project').value,
-        worker: DOM.get('job-worker').value,
-        model: DOM.get('job-worker').value==='antigravity'?DOM.get('job-model').value:null,
+        worker: 'copilot',
         kind: DOM.get('job-kind').value,
         expected_revision: data.projects.revision
       });
@@ -1098,20 +1161,52 @@ const OverviewComponent = (() => {
 // COMPONENT: AgentsComponent (#agents)
 // =============================================================================
 const AgentsComponent = (() => {
+  function _openChat(room) {
+    const project = Store.get().projects.projects[0];
+    if (!project) return;
+    WorkspaceUI.openProject(project.id, 'conversation');
+    DOM.get('chat-recipient').value = room;
+    DOM.get('chat-recipient').dispatchEvent(new Event('change'));
+  }
+
+  function _card(profile, data) {
+    const health = data.agent_health?.[profile.room];
+    const panel = (data.team_panel || []).includes(profile.room);
+    const planner = (data.planners || []).find(p => 'cp-' + p.model === profile.room);
+    const card = DOM.el('article', undefined, 'participant-card');
+    const head = DOM.el('div', undefined, 'participant-top');
+    head.append(DOM.el('span', profile.name.slice(0, 2).toUpperCase(), 'participant-avatar'), Fmt.badge(SupervisionUI.healthLabel(health)));
+    card.append(head, DOM.el('h4', profile.name), DOM.el('p', profile.model, 'participant-role'));
+    const roles = [panel ? 'Answers team messages' : '', planner ? planner.role : ''].filter(Boolean);
+    card.append(DOM.el('small', roles.join(' · ') || 'On standby; used for direct messages and plan tasks'));
+    const footer = DOM.el('div', undefined, 'participant-footer');
+    footer.append(DOM.el('small', health?.checked_at ? 'Last checked ' + Fmt.date(health.checked_at) : 'No availability check yet'));
+    const chat = DOM.el('button', 'Open chat →');
+    chat.setAttribute('aria-label', 'Open private chat with ' + profile.name);
+    chat.addEventListener('click', () => _openChat(profile.room));
+    footer.append(chat);
+    card.append(footer);
+    return card;
+  }
+
   function update(data) {
-    const container=DOM.get('agentcards');container.replaceChildren();
-    const profileAgents=(data.agent_profiles||[]).map(p=>({name:p.name,room:p.room,role:'Model profile · '+p.provider,installation:p.model,authentication:'Available in the installed model list. Current quota is not verified.',participation:'On standby; activated only by a direct message, group broadcast or approved plan.'}));
-    for(const agent of [...data.agents.agents,...profileAgents]){
-      const card=DOM.el('article',undefined,'participant-card');const head=DOM.el('div',undefined,'participant-top');
-      const name=agent.name;const routeKey=agent.room||(name==='Grok'?'grok':name==='Gemini'?'ag-gemini-low':name==='Antigravity'?'antigravity':'codex');const health=data.agent_health?.[routeKey];const mode=SupervisionUI.healthLabel(health);
-      const avatar=DOM.el('span',name==='ChatGPT'?'GPT':name.slice(0,2).toUpperCase(),'participant-avatar agent-'+name.toLowerCase());
-      head.append(avatar,Fmt.badge(mode));card.append(head,DOM.el('h3',name),DOM.el('p',agent.role,'participant-role'));
-      const route=agent.room?'Antigravity · existing account allowance':name==='ChatGPT'?'Planning through your Codex account':name==='Gemini'?'Planning through Antigravity':name==='Grok'?'Manual handoff · no automatic requests':name==='Codex'?'Existing ChatGPT account':'Existing Google account';
-      const info=DOM.el('div',undefined,'participant-route');info.append(DOM.el('small','CONNECTION ROUTE'),DOM.el('p',route));card.append(info);
-      const details=DOM.el('details');details.open=Boolean(container.closest('.connection-view'));details.append(DOM.el('summary','Connection details'));
-      for(const [key,label] of [['installation','Available tooling'],['authentication','Authentication'],['participation','Last recorded participation']]){const row=DOM.el('div',undefined,'participant-fact');row.append(DOM.el('small',label),DOM.el('p',agent[key]));details.append(row);}card.append(details);
-      const footer=DOM.el('div',undefined,'participant-footer');footer.append(DOM.el('small',health?.checked_at?'Last checked '+Fmt.date(health.checked_at):'No availability check yet'));
-      const chat=DOM.el('button',name==='Grok'?'View handoff':'Open chat →');chat.addEventListener('click',()=>{const project=Store.get().projects.projects[0];if(!project)return;WorkspaceUI.openProject(project.id,'conversation');const recipient=agent.room|| (name==='Grok'?'grok':name==='Gemini'?'ag-gemini-low':name==='Antigravity'?'antigravity':'codex');DOM.get('chat-recipient').value=recipient;DOM.get('chat-recipient').dispatchEvent(new Event('change'));});footer.append(chat);card.append(footer);container.append(card);
+    const container = DOM.get('agentcards');
+    container.replaceChildren();
+    const families = new Map();
+    for (const profile of data.agent_profiles || []) {
+      if (!families.has(profile.family)) families.set(profile.family, []);
+      families.get(profile.family).push(profile);
+    }
+    const intro = DOM.el('article', undefined, 'participant-card');
+    intro.append(DOM.el('h3', 'Copilot models'), DOM.el('p', 'GitHub Copilot is the only connected provider. ' + (data.agent_profiles || []).length + ' models, each with its own private chat room.'));
+    container.append(intro);
+    for (const [family, profiles] of families) {
+      const group = DOM.el('section', undefined, 'agent-family');
+      group.append(DOM.el('h3', family + ' · ' + profiles.length));
+      const grid = DOM.el('div', undefined, 'cards');
+      for (const profile of profiles) grid.append(_card(profile, data));
+      group.append(grid);
+      container.append(group);
     }
   }
   return {update};
@@ -1283,9 +1378,8 @@ const AppController = (() => {
 // =============================================================================
 
 const VisualWorkspace=(()=>{
- let projectView="table";
  function jump(id){const select=DOM.get('chat-project');select.value=id;select.dispatchEvent(new Event('change'));Router.activate('#conversation');}
- const contacts=[{id:'team',name:'Everyone',icon:'✦',note:'Shared project conversation'},{id:'codex',name:'Codex',icon:'C',note:'Connected · account worker'},{id:'antigravity',name:'Antigravity',icon:'A',note:'Connected · choose a model'},{id:'grok',name:'Grok',icon:'G',note:'Standby · manual handoff'}];
+ const contacts=[{id:'team',name:'Everyone',icon:'✦',note:'Group send to the panel models'}];
  const recent=[];
  function openContact(contact){
    DOM.get('chat-recipient').value=contact.id;
@@ -1296,55 +1390,36 @@ const VisualWorkspace=(()=>{
  }
  function rooms(data){
   for(const profile of data.agent_profiles||[]){if(!contacts.some(c=>c.id===profile.room))contacts.push({id:profile.room,name:profile.name,icon:profile.name.slice(0,1),note:'Standby · '+profile.model});}
+   const hasLegacy=(data.projects.messages||[]).some(m=>m.room==='legacy');
+   const legacyAt=contacts.findIndex(c=>c.id==='legacy');
+   if(hasLegacy&&legacyAt<0)contacts.push({id:'legacy',name:'Retired provider (history)',icon:'⌛',note:'Read-only history'});
+   if(!hasLegacy&&legacyAt>=0)contacts.splice(legacyAt,1);
    const list=DOM.get('room-list');list.replaceChildren();const query=DOM.get('room-search').value.toLowerCase();const selected=DOM.get('chat-recipient').value;
    for(const contact of contacts.filter(c=>c.name.toLowerCase().includes(query))){const row=DOM.el('button',undefined,'room-item'+(contact.id===selected?' selected':''));row.setAttribute('aria-label','Chat with '+contact.name);const text=DOM.el('span');text.append(DOM.el('b',contact.name),DOM.el('small',contact.note));row.append(DOM.el('span',contact.icon,'room-avatar'),text);row.addEventListener('click',()=>openContact(contact));list.append(row);}
-   for(const c of contacts){if(c.id!=='team'){c.status=SupervisionUI.healthLabel(data.agent_health?.[c.id]);c.note=c.status+(c.id==='antigravity'?' · account default':'');}}
+   for(const c of contacts){if(c.id!=='team'&&c.id!=='legacy'){c.status=SupervisionUI.healthLabel(data.agent_health?.[c.id]);c.note=c.status;}}
    WorkspaceUI.configureContacts(contacts,selected,openContact);
    const contact=contacts.find(c=>c.id===selected);const project=data.projects.projects.find(p=>p.id===DOM.get('chat-project').value);
    const switcher=DOM.el('button',undefined,'contact-menu-button');switcher.id='contact-menu-button';switcher.type='button';switcher.setAttribute('aria-label','Choose conversation, current '+(contact?.name||'Everyone'));switcher.setAttribute('aria-haspopup','dialog');switcher.setAttribute('aria-controls','contact-picker');switcher.setAttribute('aria-expanded',String(Boolean(DOM.get('contact-picker')?.open)));switcher.title='Choose an agent or group';switcher.append(DOM.el('span',contact?.icon||'✦','room-avatar'));switcher.addEventListener('click',WorkspaceUI.openContacts);
-   DOM.get('room-summary').replaceChildren(switcher,DOM.el('b',contact?.name||'Everyone'),DOM.el('small',selected==='team'?'Group conversation':selected==='grok'?'Private · manual handoff':'Private conversation'));
+   DOM.get('room-summary').replaceChildren(switcher,DOM.el('b',contact?.name||'Everyone'),DOM.el('small',selected==='team'?'Group conversation':selected==='legacy'?'Read-only history':'Private conversation'));
  }
 
  function update(data){rooms(data);const host=DOM.get('visual-analytics');host.replaceChildren();const projects=data.projects.projects;const done=projects.filter(p=>p.status==='COMPLETED').length;
   const stats=DOM.el('div',undefined,'reference-stats');for(const [name,value] of [['Total projects',projects.length],['Completed',done],['In progress',projects.filter(p=>p.status==='STARTED').length],['Waiting',projects.filter(p=>['SUBMITTED','QUEUED'].includes(p.status)).length]]){const card=DOM.el('article');card.append(DOM.el('span',name),DOM.el('strong',value),DOM.el('small','From project records'));stats.append(card);}host.append(stats);
   const charts=DOM.el('div',undefined,'reference-charts');const activity=DOM.el('article');activity.append(DOM.el('h3','Workspace activity'),DOM.el('p','Recorded events · last 7 days','muted'));const bars=DOM.el('div',undefined,'activity-bars');const dates=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return d;});const counts=dates.map(d=>data.activity.filter(e=>new Date(e.at).toDateString()===d.toDateString()).length);const max=Math.max(1,...counts);dates.forEach((d,i)=>{const bar=DOM.el('div');const fill=DOM.el('span',String(counts[i]));fill.style.height=(counts[i]/max*140+4)+'px';bar.append(fill,DOM.el('small',d.toLocaleDateString(undefined,{weekday:'short'})));bars.append(bar);});activity.append(bars);
   const progress=DOM.el('article');progress.append(DOM.el('h3','Project completion'));const percent=projects.length?Math.round(done/projects.length*100):0;const donut=DOM.el('div',undefined,'progress-ring');donut.style.background=`conic-gradient(#7954eb ${percent*3.6}deg,#eeebf5 0)`;const middle=DOM.el('span');middle.append(DOM.el('strong',projects.length?percent+'%':'—'),DOM.el('small',projects.length?'Completed':'No projects yet'));donut.append(middle);progress.append(donut);charts.append(activity,progress);host.append(charts);
-  const team=DOM.el('article',undefined,'dashboard-team');team.append(DOM.el('h3','Team collaboration'));for(const agent of data.agents.agents){const row=DOM.el('div',undefined,'team-person');const identity=DOM.el('div');identity.append(DOM.el('b',agent.name),DOM.el('small',agent.role));const status=agent.name==='Grok'?'Standby':['Codex','Antigravity'].includes(agent.name)?'Configured':'Manual';row.append(DOM.el('span',agent.name.slice(0,1),'room-avatar'),identity,DOM.el('span',status,'team-state'));team.append(row);}host.append(team);
+  const team=DOM.el('article',undefined,'dashboard-team');team.append(DOM.el('h3','Copilot models'));for(const profile of (data.agent_profiles||[]).slice(0,8)){const row=DOM.el('div',undefined,'team-person');const identity=DOM.el('div');identity.append(DOM.el('b',profile.name),DOM.el('small',profile.family));row.append(DOM.el('span',profile.name.slice(0,1),'room-avatar'),identity,DOM.el('span',SupervisionUI.healthLabel(data.agent_health?.[profile.room]),'team-state'));team.append(row);}team.append(DOM.el('small','Showing 8 of '+(data.agent_profiles||[]).length+' models. See Agents for all.'));host.append(team);
   const portfolio=DOM.el('article',undefined,'dashboard-portfolio');const heading=DOM.el('div',undefined,'portfolio-heading');heading.append(DOM.el('h3','Projects'));const add=DOM.el('a','＋ Add project');add.href='#projects';heading.append(add);portfolio.append(heading);const portfolioTable=DOM.el('table');portfolioTable.id='dashboard-project-table';const tr=DOM.el('tr');for(const label of ['Project','Status','Priority','Updated',''])tr.append(DOM.el('th',label));portfolioTable.append(tr);for(const p of projects){const row=DOM.el('tr');row.append(DOM.el('td',p.name),DOM.el('td',Fmt.statusLabel(p.status)),DOM.el('td',p.priority),DOM.el('td',Fmt.date(p.updated_at)));const cell=DOM.el('td');const button=DOM.el('button','Open →');button.addEventListener('click',()=>WorkspaceUI.openProject(p.id));cell.append(button);row.append(cell);portfolioTable.append(row);}portfolio.append(portfolioTable);if(!projects.length)portfolio.append(DOM.el('p','Your next project starts here.','muted'));host.append(portfolio);
-  const board=DOM.get('visual-project-board');if(document.activeElement?.closest('#visual-project-board input,#visual-project-board select'))return;board.replaceChildren();const p=projects.find(p=>p.id===DOM.get('pm-project').value);const items=p?.management?.items||[];
-  const views=DOM.el('div',undefined,'pm-view-tabs');for(const [id,label] of [['table','▤ Main table'],['kanban','▦ Kanban'],['gantt','▥ Gantt']]){const button=DOM.el('button',label,projectView===id?'selected':'');button.addEventListener('click',()=>{projectView=id;update(Store.get());});views.append(button);}board.append(views);
-  const feedback=DOM.el('p',undefined,'pm-inline-feedback');feedback.setAttribute('role','status');board.append(feedback);
-  async function save(item,field,value){try{await API.post({action:'pm_schedule',id:p.id,item_id:item.id,[field]:value,expected_revision:Store.get().projects.revision},Store.get().write_token);await AppController.refresh();}catch(e){feedback.textContent=e.message;}}
-  const today=new Date();const month=today.toISOString().slice(0,7);const next=new Date(today.getFullYear(),today.getMonth()+1,1).toLocaleDateString('sv-SE').slice(0,7);
-  const groups=[['This month & overdue',items.filter(i=>i.due_date&&i.due_date.slice(0,7)<=month)],['Next month',items.filter(i=>i.due_date?.startsWith(next))],['Later',items.filter(i=>i.due_date&&i.due_date.slice(0,7)>next)],['Unscheduled',items.filter(i=>!i.due_date)]];
-  if(projectView==='table') for(const [name,group] of groups){if(!group.length)continue;const section=DOM.el('div',undefined,'pm-date-group');section.append(DOM.el('h3',name));const table=DOM.el('table');const headings=DOM.el('tr');for(const label of ['Outcome','Owner','Status','Start','Due date','Priority',''])headings.append(DOM.el('th',label));table.append(headings);
-    for(const item of group){const row=DOM.el('tr');row.dataset.state=item.status==='ACCEPTED'?'done':({DOING:'working',BLOCKED:'stuck',REVIEW:'review',TODO:'todo'}[item.work_status]||'todo');const title=DOM.el('td');title.append(DOM.el('b',item.title),DOM.el('small',item.kind));row.append(title);const locked=item.status==='ACCEPTED'||['COMPLETED','ARCHIVED'].includes(p.status);
-      const ownerCell=DOM.el('td');const owner=DOM.el('input');owner.value=item.owner||'Unassigned';owner.maxLength=120;owner.setAttribute('aria-label','Owner for '+item.title);owner.disabled=locked;owner.addEventListener('change',()=>save(item,'owner',owner.value));ownerCell.append(owner);row.append(ownerCell);
-      const stateCell=DOM.el('td',undefined,'pm-status-cell');const state=DOM.el('select');for(const [value,label] of [['TODO','To do'],['DOING','Working on it'],['BLOCKED','Stuck'],['REVIEW','On review'],...(item.status==='ACCEPTED'?[['DONE','Done']]:[])])state.append(new Option(label,value));state.value=item.status==='ACCEPTED'?'DONE':item.work_status||'TODO';state.className='state-'+state.value.toLowerCase();state.disabled=locked;state.setAttribute('aria-label','Status for '+item.title);state.addEventListener('change',()=>save(item,'work_status',state.value));stateCell.append(state);row.append(stateCell);
-      const startCell=DOM.el('td');const startInput=DOM.el('input');startInput.type='date';startInput.value=item.start_date||'';startInput.disabled=locked;startInput.setAttribute('aria-label','Start date for '+item.title);startInput.addEventListener('change',()=>save(item,'start_date',startInput.value));startCell.append(startInput);row.append(startCell);
-      const dueCell=DOM.el('td');const due=DOM.el('input');due.type='date';due.value=item.due_date||'';due.disabled=locked;due.setAttribute('aria-label','Due date for '+item.title);due.addEventListener('change',()=>save(item,'due_date',due.value));dueCell.append(due);row.append(dueCell);
-      const priCell=DOM.el('td');const pri=DOM.el('select');for(const [value,label] of [['LOW','☆ Low'],['NORMAL','★ Normal'],['HIGH','★★ High']])pri.append(new Option(label,value));pri.value=item.priority||'NORMAL';pri.disabled=locked;pri.setAttribute('aria-label','Priority for '+item.title);pri.addEventListener('change',()=>save(item,'priority',pri.value));priCell.append(pri);row.append(priCell);
-      const action=DOM.el('td');const details=DOM.el('button',item.status==='ACCEPTED'?'Evidence':'Review');details.addEventListener('click',()=>{const body=DOM.get('detailbody');body.replaceChildren(DOM.el('h2',item.title),DOM.el('p','Done means: '+item.criteria),DOM.el('p',item.evidence||'No delivered evidence yet.'));if(item.artifact)body.append(DOM.el('pre',item.artifact));if(!locked&&!item.plan_id){const form=DOM.el('form');const evidence=DOM.el('textarea');evidence.required=true;evidence.maxLength=2000;evidence.placeholder='Artifact reference and acceptance evidence';evidence.setAttribute('aria-label','Acceptance evidence');form.append(evidence,DOM.el('button','Accept as done'));form.addEventListener('submit',async e=>{e.preventDefault();try{await API.post({action:'pm_accept',id:p.id,item_id:item.id,evidence:evidence.value,expected_revision:Store.get().projects.revision},Store.get().write_token);DOM.get('detail').close();await AppController.refresh();}catch(error){feedback.textContent=error.message;}});body.append(form);}DOM.get('detail').showModal();});action.append(details);row.append(action);table.append(row);}
-    section.append(table);board.append(section);
+  const board = DOM.get('visual-project-board');
+  if (typeof WorkUI === 'undefined') {
+    board.textContent = 'The Work view script (work.js) did not load. Reload the page.';
+  } else {
+    WorkUI.update(board, data, DOM.get('pm-project').value);
   }
-  if(projectView==='kanban'){
-    const lanes=DOM.el('div',undefined,'pm-kanban');for(const [state,label] of [['TODO','To do'],['DOING','Working on it'],['BLOCKED','Stuck'],['REVIEW','On review'],['DONE','Done']]){const lane=DOM.el('div');const members=items.filter(i=>(i.status==='ACCEPTED'?'DONE':i.work_status||'TODO')===state);lane.append(DOM.el('h3',label+' · '+members.length));for(const item of members){const card=DOM.el('article');card.dataset.state=item.status==='ACCEPTED'?'done':({DOING:'working',BLOCKED:'stuck',REVIEW:'review',TODO:'todo'}[item.work_status]||'todo');card.append(DOM.el('b',item.title),DOM.el('p',item.criteria),DOM.el('small',(item.owner||'Unassigned')+' · '+(item.due_date||'No due date')));if(item.status!=='ACCEPTED'&&!['COMPLETED','ARCHIVED'].includes(p.status)){const select=DOM.el('select');select.setAttribute('aria-label','Move '+item.title);for(const [value,name] of [['TODO','To do'],['DOING','Working on it'],['BLOCKED','Stuck']])select.append(new Option(name,value));select.value=item.work_status||'TODO';select.addEventListener('change',()=>save(item,'work_status',select.value));card.append(select);}lane.append(card);}lanes.append(lane);}board.append(lanes);
-  }
-  if(projectView==='gantt'){
-    const scheduled=items.filter(i=>i.start_date&&i.due_date);const unscheduled=items.filter(i=>!i.start_date||!i.due_date);
-    if(scheduled.length){const day=86400000;const parse=v=>Date.parse(v+'T00:00:00Z');const min=Math.min(...scheduled.map(i=>parse(i.start_date)));const max=Math.max(...scheduled.map(i=>parse(i.due_date)));const span=Math.max(day,max-min+day);const chart=DOM.el('div',undefined,'gantt-chart');const axis=DOM.el('div',undefined,'gantt-axis');axis.append(DOM.el('span','Outcome'));const labels=DOM.el('div');for(let n=0;n<=4;n++)labels.append(DOM.el('small',new Date(min+(max-min)*n/4).toLocaleDateString(undefined,{month:'short',day:'numeric',timeZone:'UTC'})));axis.append(labels);chart.append(axis);
-      for(const item of scheduled){const row=DOM.el('div',undefined,'gantt-row');row.dataset.state=item.status==='ACCEPTED'?'done':({DOING:'working',BLOCKED:'stuck',REVIEW:'review',TODO:'todo'}[item.work_status]||'todo');const name=DOM.el('div');name.append(DOM.el('b',item.title),DOM.el('small',item.start_date+' → '+item.due_date));const track=DOM.el('div',undefined,'gantt-track');const bar=DOM.el('span',item.owner||'Unassigned','gantt-bar '+(item.status==='ACCEPTED'?'done':''));bar.style.marginLeft=((parse(item.start_date)-min)/span*100)+'%';bar.style.width=((parse(item.due_date)-parse(item.start_date)+day)/span*100)+'%';bar.title=item.title+': '+item.start_date+' to '+item.due_date;track.append(bar);row.append(name,track);chart.append(row);}board.append(chart);
-    }else board.append(DOM.el('p','Set start and due dates in Main table to build your Gantt chart.','gantt-empty'));
-    if(unscheduled.length){const list=DOM.el('div',undefined,'gantt-unscheduled');list.append(DOM.el('h3','Unscheduled · '+unscheduled.length));for(const item of unscheduled)list.append(DOM.el('p',item.title+' — '+(!item.start_date&&!item.due_date?'dates needed':!item.start_date?'start date needed':'due date needed')));board.append(list);}
-  }
-  if(!items.length){const empty=DOM.el('div',undefined,'pm-empty');empty.append(DOM.el('h3','A clear plan starts with the first outcome'),DOM.el('p','Your coordinators will propose outcomes and acceptance criteria. Review their plan in Team chat.'));board.append(empty);}
 
  }
  function mount(){DOM.get('room-search').addEventListener('input',()=>Store.get()&&rooms(Store.get()));DOM.get('pm-project').addEventListener('change',()=>Store.get()&&update(Store.get()));
-  DOM.get('grok-brief').addEventListener('click',()=>{const data=Store.get();const p=data?.projects.projects.find(p=>p.id===DOM.get('chat-project').value);if(!p)return;const messages=(data.projects.messages||[]).filter(m=>m.project_id===p.id&&(m.room||'team')==='grok').slice(-8);const content='# CADF handoff to Grok\nProject: '+p.name+'\nBrief: '+p.brief+'\n\nReply with recommendations, evidence gaps and owner decisions. Do not claim tool access or completed work.\n\n'+messages.map(m=>m.sender+': '+m.content).join('\n\n');const url=URL.createObjectURL(new Blob([content],{type:'text/plain'}));const a=DOM.el('a');a.href=url;a.download='CADF-Grok-brief.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
-  DOM.get('grok-import').addEventListener('click',async()=>{const data=Store.get();if(!data||!DOM.get('chat-project').value)return;try{await API.post({action:'grok_reply',id:DOM.get('chat-project').value,content:DOM.get('grok-response').value,expected_revision:data.projects.revision},data.write_token);DOM.get('grok-response').value='';await AppController.refresh();DOM.get('chat-feedback').textContent='Grok response imported with owner-supplied attribution.';}catch(e){DOM.get('chat-feedback').textContent=e.message;}});
  }
- return {rooms,update,mount,setView(view){projectView=view;if(Store.get())update(Store.get());}};
+ return {rooms,update,mount,setView(){if(Store.get())update(Store.get());}};
 })();
 const SectionViews=(()=>{
  const registry={};
@@ -1358,10 +1433,10 @@ const SectionViews=(()=>{
   const add=panel(pm,[node('pm-item-form').closest('article')]);const discussion=panel(pm,[node('pm-batches').closest('article')]);const records=panel(pm,[node('pm-version-form').closest('article')]);const close=panel(pm,[node('pm-close-form').closest('article')]);pm.append(node('pm-feedback'));node('pm-edit').hidden=true;
   for(const old of [summary,add,discussion,records,close])old.hidden=true;
   const files=panel(pm,[node('project-chat-records')]);const delivered=panel(pm,[node('agent-deliverables')]);const dates=panel(pm,[node('project-schedule')]);
-  tabs('management',[...['Table','Kanban','Gantt'].map(name=>({name,panels:[table],action:()=>VisualWorkspace.setView(name.toLowerCase())})),{name:'Deliverables',panels:[delivered]},{name:'Documents',panels:[files]},{name:'Dates & priority',panels:[dates]}]);
-  const chat=node('conversation');const handoff=panel(chat,[node('grok-handoff')]);node('grok-handoff').open=true;const attention=panel(chat,[chat.querySelector('.attention-panel')]);const room=panel(chat,[node('chat-shortcuts'),chat.querySelector('.room-layout')]);const reviewPlan=panel(chat,[node('chat-plan-review')]);tabs('conversation',[{name:'Messages',panels:[room]},{name:'Plan review',panels:[reviewPlan]},{name:'Needs you',panels:[attention]},{name:'Manual handoffs',panels:[handoff]}]);
+  tabs('management',[{name:'Work',panels:[table]},{name:'Deliverables',panels:[delivered]},{name:'Documents',panels:[files]},{name:'Dates & priority',panels:[dates]}]);
+  const chat=node('conversation');const attention=panel(chat,[chat.querySelector('.attention-panel')]);const room=panel(chat,[node('chat-shortcuts'),chat.querySelector('.room-layout')]);const reviewPlan=panel(chat,[node('chat-plan-review')]);tabs('conversation',[{name:'Messages',panels:[room]},{name:'Plan review',panels:[reviewPlan]},{name:'Needs you',panels:[attention]}]);
   const projects=node('projects');const submit=panel(projects,[node('project-form').closest('article')]);const portfolio=panel(projects,[node('projectcards')]);tabs('projects',[{name:'Portfolio',panels:[portfolio]},{name:'Submit project',panels:[submit]}]);
-  const orch=node('orchestration');orch.querySelector('.sectionhead').append(node('job-project').closest('label'));const single=panel(orch,[node('job-form')]);const team=panel(orch,[node('team-request').closest('article')]);const jobs=panel(orch,[node('worker-notice'),node('jobcards')]);for(const h of orch.querySelectorAll(':scope > h3'))h.hidden=true;single.hidden=true;team.hidden=true;node('job-project').closest('label').hidden=true;const plans=panel(orch,[node('coordinator-plans')]);const upcoming=panel(orch,[node('dispatch-queue')]);const readiness=panel(orch,[node('readiness-cards')]);tabs('orchestration',[{name:'Coordinator plans',panels:[plans]},{name:'Queue',panels:[upcoming]},{name:'Readiness',panels:[readiness]},{name:'Execution record',panels:[jobs]}]);
+  const orch=node('orchestration');orch.querySelector('.sectionhead').append(node('job-project').closest('label'));const single=panel(orch,[node('job-form')]);const jobs=panel(orch,[node('worker-notice'),node('jobcards')]);for(const h of orch.querySelectorAll(':scope > h3'))h.hidden=true;single.hidden=true;node('job-project').closest('label').hidden=true;const plans=panel(orch,[node('coordinator-plans')]);const upcoming=panel(orch,[node('dispatch-queue')]);const readiness=panel(orch,[node('readiness-cards')]);tabs('orchestration',[{name:'Coordinator plans',panels:[plans]},{name:'Queue',panels:[upcoming]},{name:'Readiness',panels:[readiness]},{name:'Execution record',panels:[jobs]}]);
   const marketing=node('marketing');const compose=panel(marketing,[node('campaign-form').closest('article')]);const campaigns=panel(marketing,[node('campaigncards')]);compose.hidden=true;const marketingHome=panel(marketing,[node('marketing-home')]);const marketingConnections=panel(marketing,[node('marketing-connections')]);tabs('marketing',[{name:'Dashboard',panels:[marketingHome]},{name:'Agent drafts',panels:[campaigns]},{name:'Connections',panels:[marketingConnections]}]);
   const overview=node('overview');const dashboard=panel(overview,[node('visual-analytics')]);const audit=panel(overview,[overview.querySelector('.dashboard-records')]);audit.querySelector('details').open=true;tabs('overview',[{name:'Dashboard',panels:[dashboard]},{name:'Workspace records',panels:[audit]}]);
   const tasks=node('tasks');const taskBoard=panel(tasks,[node('grouped-task-board')]);tasks.querySelector('.task-view-toggle').hidden=true;tabs('tasks',[{name:'List',panels:[taskBoard],action:()=>node('task-list-view').click()},{name:'Board',panels:[taskBoard],action:()=>node('task-card-view').click()}]);

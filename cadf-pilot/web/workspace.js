@@ -24,7 +24,7 @@ const WorkspaceUI=(()=>{
     for(const contact of contactCatalog.filter(c=>c.name.toLowerCase().includes(query))){
       const button=el('button',undefined,'contact-orbit'+(contact.id===selectedContact?' selected':''));button.type='button';button.setAttribute('aria-label','Chat with '+contact.name);button.setAttribute('aria-pressed',String(contact.id===selectedContact));button.title=contact.note;
       button.append(el('span',contact.icon,'orbit-avatar'),el('b',contact.name));
-      if(contact.status)button.append(el('small',contact.status));else if(contact.id==='grok')button.append(el('small','Manual'));
+      if(contact.status)button.append(el('small',contact.status));
       button.addEventListener('click',()=>{$('contact-picker').close();SectionViews.select('conversation','Messages');chooseContact(contact);});grid.append(button);
     }
     if(!grid.children.length)grid.append(el('p','No matching conversations.','muted'));
@@ -39,7 +39,7 @@ const WorkspaceUI=(()=>{
     const data=Store.get();if(!data?.projects.projects.some(p=>p.id===id))return;
     for(const select of ['pm-project','chat-project','job-project'])$(select).value=id;
     ManagementComponent.update(data);ChatComponent.update(data);VisualWorkspace.update(data);SupervisionUI.update(data);update(data);
-    Router.activate('#'+view);SectionViews.select(view,view==='management'?'Table':'Messages');
+    Router.activate('#'+view);SectionViews.select(view,view==='management'?'Work':'Messages');
     $('management').dataset.project=id;
   }
   function downloadLinks(pid,record=''){
@@ -155,16 +155,12 @@ const WorkspaceUI=(()=>{
     enhance('projectcards',':scope > article',{label:'projects',placeholder:'Search projects…'});
     enhance('events',':scope > .event',{label:'activity',placeholder:'Search the audit trail…'});
     enhance('grouped-task-board','.group-task-row',{label:'tasks',placeholder:'Find a task or agent…',groups:'.task-group'});
-    enhance('visual-project-board','.pm-date-group tr:not(:first-child),.pm-kanban article,.gantt-row',{label:'deliverables',placeholder:'Search outcomes or agents…',groups:'.pm-date-group',filters:[['working','Working'],['stuck','Blocked'],['review','Review'],['done','Done']]});
     enhance('agent-deliverables',':scope > article',{label:'delivered artifacts',placeholder:'Find a deliverable…'});
     enhance('project-chat-records',':scope > details',{label:'documents',placeholder:'Search project records…',filters:[['decisions','Decisions'],['requirements','Requirements'],['progress','Progress'],['blockers','Blockers'],['ideas','Ideas']]});
     enhance('dispatch-queue',':scope > .queue-item',{label:'queued work',placeholder:'Find a project or agent…'});
     enhance('readiness-cards',':scope > .readiness-card',{label:'readiness',placeholder:'Find a project or blocker…',filters:[['ready','Checks passed'],['waiting','Waiting'],['blocked','Needs attention']]});
     enhance('jobcards',':scope > article',{label:'jobs',placeholder:'Search execution records…',filters:[['succeeded','Succeeded'],['failed','Failed'],['running','Running']]});
     enhance('campaigncards',':scope > article',{label:'campaigns',placeholder:'Search content drafts…',filters:[['facebook','Facebook'],['instagram','Instagram'],['linkedin','LinkedIn']]});
-    // Reapply owner-only schedule permissions after any view redraw.
-    document.querySelectorAll('#visual-project-board input[aria-label^="Owner"],#visual-project-board select[aria-label^="Status"],#visual-project-board select[aria-label^="Move"]').forEach(n=>n.disabled=true);
-    const add=document.querySelector('.pm-table-toolbar>.btn-primary');if(add)add.hidden=true;
   }
   return {beforeMount,mount,update,openProject,downloadLinks,header,notify,configureContacts,openContacts};
 })();

@@ -14,18 +14,19 @@ Open http://127.0.0.1:8765. Omit `--orchestrate` for a UI-only session. Stop wit
 
 ## Use
 
-1. Submit a project name and a brief. The Codex/ChatGPT-account and Gemini/AG planners propose outcomes and assignments using existing account quota.
-2. Review the exact plan in Team chat → Plan review. No execution tasks start before your approval.
-3. Converse privately with an agent or broadcast in the team room. Enter sends; Shift+Enter starts a new line. Each room keeps separate context and drafts.
+1. Create a project and pick its **mode**: **AI** (agents do the work), **Human** (your team does it; tickets, schedule and charts are generated from the information you enter, no model is called) or **Hybrid** (an AI plan that also contains human action tickets).
+2. For AI/Hybrid projects, one Copilot model drafts the plan and a different one reviews it. Review the exact plan in Team chat → Plan review; agents start when you approve (or immediately, if you enabled *auto-start*).
+3. Agents draft and review each other automatically. A reviewer that requests changes sends the draft back (up to two cycles); you are only pulled in on a conflict, a blocker or an unresolved disagreement. With *autopilot* on (default), a project closes itself once every draft has an approving review by a different model.
+4. Converse privately with any of the Copilot models or broadcast to the team panel. Enter sends; Shift+Enter starts a new line. Each room keeps separate context and drafts. Enter sends; Shift+Enter starts a new line. Each room keeps separate context and drafts.
 4. Reply as Decision or Requirement change to record a versioned change. Changed scope requires a revised approved plan.
-5. View Table/Kanban/Gantt, artifacts and documents under Project workspace. Adjust dates/priority. Download Word, formatted HTML or Markdown on demand.
-6. Accept delivered artifacts and close finished projects.
+5. Work section: Table, Kanban, Gantt and Charts are all derived from one set of tickets, filled from the plan, from documents agents deliver and from information you paste or type. Add/edit tickets, auto-schedule, and download CSV, SVG charts, an HTML report, Markdown or Word. Documents also download as Word, HTML or Markdown.
+6. Accept delivered artifacts and close finished projects (automatic under autopilot).
 
 The interface has light/dark/system themes, section tabs, search, sorting, filters, pagination and automatic snapshot refresh. Marketing displays actual local drafts and explicit connection gaps. Storage is a future feature.
 
 ## Important boundaries
 
-The worker currently executes bounded text planning, drafting and review. It does not autonomously edit project code, search the live web, contact customers, apply for jobs, publish posts or deploy. Those adapters remain future work. Meta is not connected. Grok is manual/standby. AG model availability does not establish remaining quota. No automatic paid fallback is allowed.
+The worker currently executes bounded text planning, drafting and review. It does not autonomously edit project code, search the live web, contact customers, apply for jobs, publish posts or deploy. Those adapters remain future work. Meta is not connected. All agents run through the GitHub Copilot CLI (`copilot login` once; `bash scripts/doctor.sh` checks it) and consume your Copilot allowance; set `CADF_MAX_AI_CREDITS` to cap any single call. Agents run with every tool disabled and API keys removed from their environment.
 
 Read **docs/CURRENT-STATE.md** first for the full current handoff, known limitations and test evidence. Historical documents describe earlier setup decisions.
 

@@ -74,9 +74,34 @@ def docx_document(title,text,stamp):
     return buffer.getvalue()
 
 
+WORK_FORMATS={'csv':('text/csv; charset=utf-8','.csv'),'svg-gantt':('image/svg+xml','-gantt.svg'),'svg-status':('image/svg+xml','-status.svg'),
+              'svg-workload':('image/svg+xml','-workload.svg'),'svg-burndown':('image/svg+xml','-burndown.svg'),'report':('text/html','-work-report.html'),
+              'work-md':('text/markdown','-work-plan.md'),'work-docx':('application/vnd.openxmlformats-officedocument.wordprocessingml.document','-work-plan.docx')}
+
+
+def generate_work(project,format):
+    import pm,reports
+    view=pm.derive(project)
+    if format=='csv':body=reports.csv_tickets(view)
+    elif format=='svg-gantt':body=reports.svg_gantt(view,project['name']+' · schedule').encode()
+    elif format=='svg-status':body=reports.svg_status(view,project['name']+' · status').encode()
+    elif format=='svg-workload':body=reports.svg_workload(view).encode()
+    elif format=='svg-burndown':body=reports.svg_burndown(view).encode()
+    elif format=='report':body=reports.html_report(project,view)
+    elif format=='work-md':body=reports.markdown(project,view).encode()
+    else:
+        stamp=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+        body=docx_document(project['name']+' · work plan',reports.plain(project,view),stamp)
+    mime,suffix=WORK_FORMATS[format]
+    return body,mime,'CADF-'+project['id']+suffix
+
+
 def generate(store,project_id,record,format):
     project=next((p for p in store['projects'] if p['id']==project_id),None)
     if not project:raise ValueError('Project not found')
+    if format in WORK_FORMATS:
+        if record:raise ValueError('Work-plan downloads cover the whole project')
+        return generate_work(project,format)
     title,text=document(project,record)
     stamp=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
     filename='CADF-'+project_id+('-'+re.sub('[^A-Za-z0-9-]','',record) if record else '-project')
