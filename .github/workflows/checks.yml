@@ -54,6 +54,9 @@ jobs:
           node --check web/app.js
           node --check web/workspace.js
           node --check web/supervision.js
+          node --check web/hosted-client.js
+          node --check web/work.js
+          node --test tests/frontend.test.js
       - name: Check whitespace
         run: git diff --check HEAD^ HEAD
 

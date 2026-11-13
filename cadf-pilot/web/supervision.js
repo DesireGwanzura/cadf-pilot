@@ -36,10 +36,79 @@ const SupervisionUI=(()=>{
     row.append(actions);
     if(msg.plan_id&&msg.kind==='plan'){const review=el('button','Review proposed plan →','plan-chat-link');review.addEventListener('click',()=>SectionViews.select('conversation','Plan review'));card.append(review);}
   }
+  const KIND_LABELS={draft:'Draft',review:'Review',action:'Human action'};
+  const MAX_CYCLES=2;
+  function planSettings(p,plan){
+    const mode=(plan.mode||p.mode||'ai').toUpperCase();
+    const approval=plan.approval_mode==='auto'?'Approval: automatic (agents start without waiting)':'Approval: manual (you approve this exact plan)';
+    return 'Mode: '+mode+' · '+approval+' · Autopilot: '+(p.autopilot===false?'off':'on')+' · Auto-approve: '+(p.auto_approve?'on':'off');
+  }
+  function assigneeOf(task){
+    if(task.owner==='human')return task.assignee||'Unassigned person';
+    return task.model||'Automatic model';
+  }
+  function cyclesOf(task){
+    if(task.kind==='action')return '—';
+    return (task.cycles||0)+' of '+MAX_CYCLES;
+  }
+  function verdictOf(task){
+    if(task.verdict==='approve')return 'Approved';
+    if(task.verdict==='changes_requested')return 'Changes requested';
+    return task.kind==='review'?'Pending':'—';
+  }
+  /** Marking the ticket DONE is how a person finishes a human plan task. */
+  function markDoneButton(p,task){
+    const ticket=(p.management?.items||[]).find(item=>item.task_id===task.id);
+    const button=el('button','Mark done');
+    button.setAttribute('aria-label','Mark done: '+task.title);
+    button.disabled=!ticket;
+    button.addEventListener('click',()=>action({action:'ticket_update',item_id:ticket.id,state:'DONE'},p.id));
+    return button;
+  }
+  function taskTable(p,plan){
+    const wrap=el('div',undefined,'wk-table-wrap');
+    const table=el('table',undefined,'wk-table');
+    const head=el('tr');
+    for(const label of ['Work','Kind','Owner','Model / assignee','Days','Priority','Status','Verdict','Review cycles','Deliverable',''])head.append(el('th',label));
+    table.append(head);
+    for(const task of plan.tasks){
+      const row=el('tr');
+      row.dataset.status=task.status;
+      const status=el('td');
+      status.append(Fmt.badge(task.status==='WAITING_HUMAN'?'Waiting for a person':task.status));
+      const action_=el('td');
+      if(task.status==='WAITING_HUMAN'&&task.owner==='human')action_.append(markDoneButton(p,task));
+      row.append(
+        el('td',task.title),
+        el('td',KIND_LABELS[task.kind]||task.kind||'Draft'),
+        el('td',task.owner==='human'?'Human':'Copilot'),
+        el('td',assigneeOf(task)),
+        el('td',task.estimate_days===undefined||task.estimate_days===null?'—':String(task.estimate_days)),
+        el('td',task.priority||'NORMAL'),
+        status,
+        el('td',verdictOf(task)),
+        el('td',cyclesOf(task)),
+        el('td',task.deliverable||''),
+        action_
+      );
+      table.append(row);
+    }
+    wrap.append(table);
+    return wrap;
+  }
+  function optionToggle(p,key,label,hint){
+    const wrap=el('label',undefined,'wk-check');
+    const box=el('input');box.type='checkbox';box.checked=key==='autopilot'?p.autopilot!==false:Boolean(p[key]);
+    box.disabled=['COMPLETED','ARCHIVED'].includes(p.status);
+    box.addEventListener('change',()=>action({action:'set_options',[key]:box.checked},p.id));
+    const text=el('span');text.append(el('b',label),el('small',hint));
+    wrap.append(box,text);
+    return wrap;
+  }
   function planCard(p,plan){
     const card=el('article',undefined,'proposal-card');card.append(el('small','PLAN '+plan.status.replaceAll('_',' ')),el('h3',p.name),el('p',plan.summary));
-    const table=el('table');const head=el('tr');for(const label of ['Work','Assigned agent','Deliverable'])head.append(el('th',label));table.append(head);
-    for(const task of plan.tasks){const row=el('tr');row.append(el('td',task.title),el('td',task.owner+(task.model?' · '+task.model:'')),el('td',task.deliverable));table.append(row);}card.append(table);
+    card.append(el('p',planSettings(p,plan),'muted'));
+    card.append(taskTable(p,plan));
     const details=el('details');details.append(el('summary','Review scope & acceptance'));
     for(const task of plan.tasks)details.append(el('h4',task.title),el('p',task.instructions),el('p','Done means: '+task.acceptance),el('small','Depends on: '+(task.depends_on.join(', ')||'none')));card.append(details);
     for(const blocker of plan.blockers)card.append(el('p',blocker,'proposal-blocker'));
@@ -56,7 +125,17 @@ const SupervisionUI=(()=>{
   }
   function renderPlans(host,p){host.replaceChildren();if(!p){host.append(el('p','Submit a project brief to begin. Your agents will propose the deliverables.','muted'));return;}
     const c=p.coordination;const active=(Store.get().projects.jobs||[]).some(j=>j.project_id===p.id&&['RUNNING','APPROVED','CANCEL_REQUESTED'].includes(j.status));
-    host.append(el('small','CHATGPT ACCOUNT + GEMINI'),el('h3',c?c.state.replaceAll('_',' '):'Ready for coordinator planning'));
+    const mode=p.mode||'ai';
+    if(mode==='human'){
+      host.append(el('small','HUMAN PROJECT'),el('h3',p.name),el('p','People do the tickets and no AI plan is needed. Manage them in Work.','muted'));
+      const open=el('button','Open Work');open.addEventListener('click',()=>WorkspaceUI.openProject(p.id));host.append(open);
+      return;
+    }
+    const planners=(Store.get().planners||[]).map(x=>x.role+' ('+x.model+')').join(' · ');
+    host.append(el('small',planners?'PLANNERS · '+planners:'COPILOT PLANNERS'),el('h3',c?c.state.replaceAll('_',' '):'Ready for coordinator planning'));
+    const options=el('div',undefined,'wk-options');
+    options.append(optionToggle(p,'autopilot','Autopilot','Accept and close automatically once every draft has an approving review from a different model and no issues are open.'),optionToggle(p,'auto_approve','Start agents automatically','Opt-in. Off means you approve the plan before any agent starts.'));
+    host.append(options);
     if(!c||['NOT_PLANNED','NEEDS_REPLAN','BLOCKED'].includes(c.state)){const button=el('button','Ask coordinators to prepare a plan');button.disabled=active||['PAUSED','COMPLETED','ARCHIVED'].includes(p.status);button.addEventListener('click',()=>action({action:'prepare_plan'},p.id));host.append(button);}
     if(c?.state==='PLANNING')host.append(el('p','The coordinators are preparing your proposal. Execution waits for your review.'));
     if(p.status==='PAUSED'){const resume=el('button','Resume planning');resume.addEventListener('click',()=>action({action:'resume_planning'},p.id));host.append(resume);}
@@ -73,11 +152,9 @@ const SupervisionUI=(()=>{
     for(const v of [...(selected?.management?.versions||[])].reverse()){const item=el('details');item.append(el('summary',v.category+' v'+v.number+' · '+(v.room&&v.room!=='team'?'Private / '+v.room+' · ':'Team · ')+Fmt.date(v.at)),WorkspaceUI.downloadLinks(selected.id,v.id),el('pre',v.content));records.append(item);}
     if(!records.children.length)records.append(el('p','Decisions and requirement updates will appear here as you reply in chat.','muted'));
     const artifacts=$('agent-deliverables');artifacts.replaceChildren();for(const item of selected?.management?.items||[]){const card=el('article');card.append(el('h3',item.title),el('p',item.owner||'Coordinator assignment pending'),el('small',item.status==='ACCEPTED'?'Accepted':item.work_status||'Pending'));if(item.artifact){const detail=el('details');detail.append(el('summary','Open deliverable'),el('pre',item.artifact));card.append(detail,WorkspaceUI.downloadLinks(selected.id,item.id));}else card.append(el('p','No artifact delivered yet.','muted'));artifacts.append(card);}
-    // Hide former user authoring/assignment controls; schedule edits stay available.
-    document.querySelectorAll('.pm-table-toolbar>.btn-primary').forEach(n=>n.hidden=true);
-    document.querySelectorAll('#visual-project-board input[aria-label^="Owner"],#visual-project-board select[aria-label^="Status"],#visual-project-board select[aria-label^="Move"]').forEach(n=>n.disabled=true);
-    document.querySelectorAll('#projectcards button').forEach(n=>{if(['Start','Resume','Queue','Edit brief','Complete'].includes(n.textContent.trim()))n.hidden=true;});
-    $('chat-compose-limit').textContent='Team execution starts only after you approve the coordinator plan. Direct messages request one bounded reply.';
+    // Supervised projects are driven by the plan, so manual start controls are hidden on their cards.
+    document.querySelectorAll('#projectcards [data-workflow="supervised"] button').forEach(n=>{if(['Start','Resume','Queue','Edit brief','Complete'].includes(n.textContent.trim()))n.hidden=true;});
+    $('chat-compose-limit').textContent='Agents start after the plan is approved (or automatically when auto-approve is on). Direct messages request one bounded reply.';
     const schedule=$('project-schedule');if(document.activeElement?.closest('#project-schedule'))return;
     schedule.replaceChildren();if(selected){const fields={start_date:['Start date','date'],end_date:['End date','date'],priority:['Project priority','select']};for(const [key,[label,type]] of Object.entries(fields)){const wrap=el('label',label);const input=el(type==='select'?'select':'input');if(type==='select'){for(const v of ['LOW','NORMAL','HIGH'])input.append(new Option(v,v));}else input.type=type;input.value=selected[key]||'';input.disabled=['COMPLETED','ARCHIVED'].includes(selected.status);input.addEventListener('change',()=>action({action:'project_schedule',[key]:input.value},selected.id));wrap.append(input);schedule.append(wrap);}}
   }
@@ -139,7 +216,6 @@ const SupervisionUI=(()=>{
   }
   function healthLabel(health){
     if(health?.active)return health.active==='RUNNING'?'Checking / working':'Queued';
-    if(health?.status==='MANUAL')return 'Manual · standby';
     if(health?.worker_online===false)return 'Worker offline';
     return {AVAILABLE:'Responded',QUOTA_LIMITED:'Quota limited',AUTH_REQUIRED:'Sign-in needed',UNAVAILABLE:'Unavailable',ERROR:'Needs attention',BUDGET_BLOCKED:'Budget guard',UNTESTED:'Not checked'}[health?.status]||'Not checked';
   }
@@ -153,35 +229,35 @@ const SupervisionUI=(()=>{
     const toolbar=el('div',undefined,'availability-toolbar');const intro=el('div');intro.append(el('h3','Agent availability'),el('p','Observed results. Checks use a small amount of your existing allowance.','muted'));
     const all=el('button','Check all agents','btn-primary');all.disabled=Object.values(data.agent_health||{}).some(h=>h.active)||!['IDLE','RUNNING'].includes(data.orchestrator.state);all.addEventListener('click',()=>checkAgents('all'));toolbar.append(intro,all);host.append(toolbar);
     const grid=el('div',undefined,'availability-grid');
-    for(const [key,name] of [['codex','Codex / ChatGPT'],['antigravity','Antigravity default'],...(data.agent_profiles||[]).map(p=>[p.room,p.name]),['grok','Grok']]){
+    for(const [key,name] of (data.agent_profiles||[]).map(p=>[p.room,p.name])){
       const h=data.agent_health?.[key];const card=el('article',undefined,'availability-card');card.dataset.status=h?.status||'UNTESTED';
       card.append(el('span',name.slice(0,2).toUpperCase(),'participant-avatar'),el('h4',name),el('strong',healthLabel(h),'availability-status'));
       card.append(el('small',h?.checked_at?'Observed '+Fmt.date(h.checked_at):'No completed check'));
       if(h?.detail){const detail=el('details');detail.append(el('summary','Details'),el('p',h.detail));card.append(detail);}
-      card.append(el('p',key==='grok'?'Free account · manual handoff':'Credit balance and reset time are not supplied by this connection.','muted'));
-      if(key!=='grok'){const button=el('button','Check connection');button.disabled=Boolean(h?.active)||!h?.worker_online;button.addEventListener('click',()=>checkAgents(key));card.append(button);}
+      card.append(el('p','Credit balance and reset time are not supplied by this connection.','muted'));
+      const button=el('button','Check connection');button.disabled=Boolean(h?.active)||!h?.worker_online;button.addEventListener('click',()=>checkAgents(key));card.append(button);
       grid.append(card);
     }
     host.append(grid);
   }
   function messageInfo(msg){
     const data=Store.get();const room=msg.room||'team';const jobs=data.projects.jobs||[];
-    const contacts=room==='team'?[['codex','Codex'],...(data.agent_profiles||[]).map(p=>[p.room,p.name])]:[[room,room==='grok'?'Grok':room==='codex'?'Codex':data.agent_profiles?.find(p=>p.room===room)?.name||'Antigravity']];
+    const profiles=data.agent_profiles||[];const panel=new Set(data.team_panel||[]);
+     const contacts=room==='team'?profiles.filter(p=>panel.has(p.room)).map(p=>[p.room,p.name]):room==='legacy'?[]:[[room,profiles.find(p=>p.room===room)?.name||room]];
     const body=$('detailbody');body.replaceChildren(el('h2','Message info'));
     const list=el('div',undefined,'receipt-list');
     for(const [key,name] of contacts){
       const model=data.agent_profiles?.find(p=>p.room===key)?.model;
-      const relevant=jobs.filter(j=>j.project_id===msg.project_id&&(j.message_id===msg.id||j.context_message_ids?.includes(msg.id))&&(key==='codex'?j.worker==='codex':key==='antigravity'?j.worker==='antigravity'&&!j.model:j.model===model));
+      const relevant=jobs.filter(j=>j.project_id===msg.project_id&&(j.message_id===msg.id||j.context_message_ids?.includes(msg.id))&&j.model===model);
       const latest=relevant.at(-1);let status='Can receive · not dispatched';
-      if(key==='grok')status='Manual handoff · receipt unavailable';
-      else if(latest?.status==='SUCCEEDED')status='Response received';
+      if(latest?.status==='SUCCEEDED')status='Response received';
       else if(latest?.status==='APPROVED')status='Queued · not dispatched';
       else if(latest?.status==='RUNNING')status=latest.dispatched_at?'Request dispatched':'Preparing request';
       else if(latest){const reason=latest.failure_kind||(/quota/i.test(latest.error||'')?'QUOTA_LIMITED':/paid-credit/i.test(latest.error||'')?'BUDGET_BLOCKED':'');status=(latest.dispatched_at?'Dispatched · ':reason==='BUDGET_BLOCKED'?'Not delivered · ':'No reply · ')+({QUOTA_LIMITED:'quota limit',BUDGET_BLOCKED:'budget guard',AUTH_REQUIRED:'sign-in needed'}[reason]||Fmt.statusLabel(latest.status));}
       if(msg.sender===name)status='Author';
       const line=el('div',undefined,'receipt-row');line.append(el('b',name),el('span',status));list.append(line);
     }
-    body.append(list,el('p','Dispatch evidence only. Providers do not supply read receipts.','muted'));
+    body.append(list,el('p',room==='legacy'?'Retired provider (history). Read-only.':'Dispatch evidence only. Copilot does not supply read receipts.','muted'));
     for(const job of jobs.filter(j=>j.message_id===msg.id&&['RUNNING','APPROVED'].includes(j.status))){const stop=el('button','Stop '+(job.participant||job.worker));stop.addEventListener('click',async()=>{await action({action:'cancel_job',job_id:job.id},job.project_id);messageInfo(msg);});body.append(stop);}
     if(!$('detail').open)$('detail').showModal();
   }

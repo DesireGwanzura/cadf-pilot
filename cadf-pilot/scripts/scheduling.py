@@ -1,6 +1,7 @@
 """Priority-aware queue and owner-visible readiness, without provider calls."""
 from datetime import datetime, timezone
 import availability
+import providers
 import workflow
 
 AGING_SECONDS = 600
@@ -11,7 +12,7 @@ def approval_matches(plan):
     try:
         return (bool(plan.get('approved_at')) and plan.get('approved_by') == 'Owner'
                 and plan.get('approval_digest') == plan.get('digest')
-                and workflow.plan_digest(workflow.validate_plan(plan)) == plan['approval_digest'])
+                and workflow.plan_digest(workflow.validate_plan(plan, plan.get('mode', 'ai'))) == plan['approval_digest'])
     except (KeyError, TypeError, ValueError, AttributeError):
         return False
 
@@ -58,7 +59,7 @@ def queue(store, now=None):
             wait = 0
         reason = hold_reason(job, project)
         rows.append({'id': job['id'], 'project_id': job['project_id'], 'project': project.get('name', 'Unknown project'),
-                     'agent': job.get('participant') or ('Codex' if job['worker']=='codex' else job.get('model') or 'Antigravity'),
+                     'agent': job.get('participant') or workflow.agent_name(job.get('model')),
                      'kind': job['kind'], 'status': job['status'], 'priority': project.get('priority', 'NORMAL'),
                      'eligible': not reason, 'hold_reason': reason, 'aged': wait >= AGING_SECONDS,
                      'created_at': job.get('created_at', ''), '_order': index})
@@ -86,16 +87,16 @@ def readiness(store, worker, health):
                        'detail': 'Current plan approved' if valid else 'Review the proposed plan' if plan and plan['status']=='PROPOSED' else 'A current coordinator plan is needed'})
         routes = set()
         if plan:
-            routes = {availability.route({'worker': t['owner'], 'model': t['model']}) for t in plan['tasks'] if t['status'] != 'DELIVERED'}
+            routes = {availability.route({'worker': t['owner'], 'model': t['model']}) for t in plan['tasks'] if t['status'] != 'DELIVERED' and t['owner'] == 'copilot'}
         else:
-            routes = {'codex', 'ag-gemini-low'}
+            routes = {providers.room_for_model(model) for _, model, _ in workflow.PLANNERS}
         for key in sorted(routes):
             observation = health.get(key, {})
             status = observation.get('status', 'UNTESTED')
-            name = workflow.PROFILES[key][0] if key in workflow.PROFILES else 'Codex' if key == 'codex' else 'Antigravity default'
+            name = workflow.PROFILES[key][0] if key in workflow.PROFILES else 'Copilot (automatic model)'
             checks.append({'label': name, 'state': 'ready' if status=='AVAILABLE' else 'waiting' if status=='UNTESTED' else 'blocked',
                            'detail': {'AVAILABLE':'Last check responded','QUOTA_LIMITED':'Last check reached a quota limit',
-                                      'AUTH_REQUIRED':'Sign-in required','BUDGET_BLOCKED':'Budget protection blocked dispatch',
+                                      'AUTH_REQUIRED':'Sign-in required','BUDGET_BLOCKED':'Budget protection blocked dispatch','UNAVAILABLE':'Copilot CLI is not available',
                                       'UNTESTED':'Availability has not been checked'}.get(status,'Last request needs attention')})
         reports.append({'project_id': project['id'], 'project': project['name'], 'checks': checks,
                         'state': 'blocked' if any(c['state']=='blocked' for c in checks) else 'waiting' if any(c['state']=='waiting' for c in checks) else 'ready'})

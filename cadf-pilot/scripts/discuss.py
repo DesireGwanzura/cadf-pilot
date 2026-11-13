@@ -11,7 +11,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--list-projects',action='store_true')
     parser.add_argument('--project')
-    parser.add_argument('--sender',choices=['Codex','Antigravity','ChatGPT','Gemini'])
+    parser.add_argument('--sender',choices=['Copilot','ChatGPT','Gemini','Codex','Antigravity'])
     parser.add_argument('--to',default='You and the team')
     parser.add_argument('--file',type=Path)
     args=parser.parse_args()

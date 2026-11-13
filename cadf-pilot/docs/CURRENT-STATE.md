@@ -1,5 +1,13 @@
 # CADF — current implementation and remaining connections
 
+> **Update (Copilot provider and work items).** This section supersedes older statements below about Codex, Antigravity/Gemini CLI, Grok, the six AG profiles and the three-stage team handoff.
+>
+> - **Provider:** GitHub Copilot CLI only (`scripts/providers.py`). 22 models are catalogued; each is a chat profile `cp-<model>`. Planner `claude-opus-5.5`, plan reviewer `gpt-6.1-sol`; group chat uses a six-model panel. Retired-route history stays readable in a `legacy` room; old stored plans owned by retired workers show as needing a replan.
+> - **Modes:** `ai`, `human`, `hybrid`. Human projects use no model; hybrid plans include `human` action tasks.
+> - **Automation:** owner approval of the reviewed plan remains the default gate; `auto_approve` is opt-in. Reviews carry a verdict; `changes_requested` automatically re-queues the draft with the feedback (max 2 cycles, then an issue is raised). `autopilot` (default on) accepts and closes the project when every draft has an approving review from a different model and no issues are open.
+> - **Work items:** one canonical ticket model (`scripts/pm.py`) feeds Table, Kanban, Gantt, Charts and downloads (CSV, SVG gantt/status/workload/burndown, HTML report, Markdown, Word). Tickets come from plans, delivered documents, pasted intake text (checklists, bullets or tables with a header row) or manual entry; scheduling is dependency- and workload-aware and skips weekends.
+> - **Limits:** execution is still one job at a time; Copilot allowance is consumed and exact quota is not visible; agents still only draft/review text.
+
 Updated 16 October 2026 by Codex. This is the current handoff; historical setup notes may describe older UI and workflows.
 
 ## Owner experience

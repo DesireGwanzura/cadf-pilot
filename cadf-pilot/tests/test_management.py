@@ -89,10 +89,10 @@ class ManagementTests(unittest.TestCase):
 
     def test_chat_send_queues_one_real_reply(self):
         self.note('Requirement: An accessible report')
-        self.act('message',recipient='codex',content='Review this requirement')
+        self.act('message',recipient='cp-claude-opus-5.5',content='Review this requirement')
         job=self.store()['jobs'][0]
         self.assertEqual(job['status'],'APPROVED')
         self.assertNotIn('accessible report',job['prompt'])  # Team-room text stays out of a private room.
-        with self.assertRaises(serve.Conflict): self.act('message',recipient='codex',content='Again')
+        with self.assertRaises(serve.Conflict): self.act('message',recipient='cp-claude-opus-5.5',content='Again')
 
 if __name__=='__main__': unittest.main()
